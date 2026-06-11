@@ -347,7 +347,6 @@ export default function App() {
     contactPerson: string;
     contactNumber: string;
   }) => {
-    const apiKey = (import.meta as any).env.VITE_RESEND_API_KEY || '';
     const fromEmail = (import.meta as any).env.VITE_RESEND_FROM_EMAIL || 'onboarding@resend.dev';
     const toEmail = (import.meta as any).env.VITE_RESEND_TO_EMAIL || 'rumeshanjanard@gmail.com';
 
@@ -406,64 +405,28 @@ export default function App() {
       </div>
     `;
 
-    const bodyPayload = {
-      from: fromEmail,
-      to: [toEmail],
-      subject: `[Cooler Alert] New Complaint Filed - ${complaintData.outletName}`,
-      html: htmlBody
-    };
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          to: toEmail,
+          from: fromEmail,
+          subject: `[Cooler Alert] New Complaint Filed - ${complaintData.outletName}`,
+          html: htmlBody
+        })
+      });
 
-    // Attempt official direct Resend API first
-    if (apiKey) {
-      try {
-        const res = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(bodyPayload)
-        });
-        if (res.ok) {
-          console.log('[Resend] Dispatched successfully');
-          return;
-        }
-        const errorText = await res.text();
-        throw new Error(errorText || `API check failed with status: ${res.status}`);
-      } catch (err: any) {
-        throw new Error(`Direct Resend dispatch error: ${err.message || err}`);
+      const responseData = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(responseData.error || `Server error status ${res.status}`);
       }
-    } else {
-      // Fallback/direct REST insert check on Supabase in case webhook triggers are configured there
-      try {
-        const backupRes = await fetch(`${SUPABASE_URL}resend_emails`, {
-          method: 'POST',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            rt_code: complaintData.rtCode,
-            outlet_name: complaintData.outletName,
-            location: complaintData.location,
-            issue: complaintData.issueType,
-            capacity: complaintData.capacity,
-            contact_person: complaintData.contactPerson,
-            contact_number: complaintData.contactNumber,
-            email_body: htmlBody,
-            recipient: toEmail
-          })
-        });
-        if (backupRes.ok) {
-          console.log('[Resend Backup] Saved to Supabase trigger successfully');
-          return;
-        }
-      } catch (e) {
-        console.warn('Backup table insert failed', e);
-      }
-      
-      console.log('Credentials missing. Displaying mocked success output for testing / sandbox verification.');
+      console.log('[Resend Proxy] Dispatched successfully');
+    } catch (err: any) {
+      console.error("Resend API proxy dispatch error:", err);
+      throw new Error(err.message || err);
     }
   };
 
