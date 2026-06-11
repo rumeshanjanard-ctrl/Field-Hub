@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  background-color: #FFFFFF;
+  color: #0F172A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Editorial Style Utilities */
+.editorial-card {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.editorial-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+  border-color: #CBD5E1;
+}
+
+.editorial-stat-card {
+  background-color: #FFFFFF;
+  border-left: 4px solid;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+}
+
+.editorial-border-line {
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.editorial-tag {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  font-size: 0.65rem;
+}
+
+/* custom serif italic display text */
+.editorial-serif-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+/* Hide scrollbar but keep scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}

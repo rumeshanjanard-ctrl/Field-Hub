@@ -1,0 +1,6 @@
+{
+  "name": "LBCL Field Operations Hub",
+  "description": "Central business operations dashboard and field sales management hub for LBCL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
