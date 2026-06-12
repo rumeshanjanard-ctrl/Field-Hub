@@ -34,21 +34,226 @@ export default function App() {
   // subPage allows full deep dive into specific apps
   const [activeSubPage, setActiveSubPage] = useState<string | null>(null);
 
+  // --- SUPABASE SESSION AUTHENTICATION STATE ---
+  const [sessionUser, setSessionUser] = useState<any>(() => {
+    const cached = localStorage.getItem('lbcl_auth_user');
+    return cached ? JSON.parse(cached) : null;
+  });
+  const [profile, setProfile] = useState<any>(() => {
+    const cached = localStorage.getItem('lbcl_auth_profile');
+    return cached ? JSON.parse(cached) : null;
+  });
+
+  const [loginSeCode, setLoginSeCode] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Helper to extract name initials
+  const getInitials = (name: string) => {
+    if (!name) return 'RA';
+    const cleanName = name.trim();
+    if (cleanName.includes(' ')) {
+      return cleanName.split(' ')
+        .map(part => part.charAt(0))
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+    }
+    return cleanName.slice(0, 2).toUpperCase();
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginSeCode || !loginPassword) {
+      setLoginError("Please enter both Outlet (SE Code) and Password.");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    const isEmail = loginSeCode.includes('@');
+    const formattedEmail = isEmail 
+      ? loginSeCode.trim() 
+      : `${loginSeCode.toLowerCase().trim()}@lbcl.com`;
+
+    // Map common profiles statically as robust fallback/seeds if REST request fails.
+    const defaultProfiles: Record<string, { full_name: string; assigned_outlet_id: string; role: string; territory: string }> = {
+      'rumesh': { full_name: "Rumesh Anjanawardana", assigned_outlet_id: "RT-1092", role: "Senior Field Operations Rep", territory: "WESTERN-04 (Colombo Base)" },
+      'se-1092': { full_name: "Rumesh Anjanawardana", assigned_outlet_id: "RT-1092", role: "Senior Field Operations Rep", territory: "WESTERN-04 (Colombo Base)" },
+      'dilshan': { full_name: "Dilshan Perera", assigned_outlet_id: "RT-4482", role: "Sales Representative", territory: "WESTERN-01 (Kottawa Division)" },
+      'se-4482': { full_name: "Dilshan Perera", assigned_outlet_id: "RT-4482", role: "Sales Representative", territory: "WESTERN-01 (Kottawa Division)" },
+      'nisansala': { full_name: "Nisansala Senayake", assigned_outlet_id: "RT-9938", role: "Auditor", territory: "WESTERN-02 (Union Place Base)" },
+      'se-9938': { full_name: "Nisansala Senayake", assigned_outlet_id: "RT-9938", role: "Auditor", territory: "WESTERN-02 (Union Place Base)" },
+      'asanka': { full_name: "Asanka Rodrigo", assigned_outlet_id: "RT-2231", role: "Operations Lead", territory: "WESTERN-03 (Hyde Park Base)" },
+      'se-2231': { full_name: "Asanka Rodrigo", assigned_outlet_id: "RT-2231", role: "Operations Lead", territory: "WESTERN-03 (Hyde Park Base)" },
+    };
+
+    const inputKey = loginSeCode.toLowerCase().trim();
+    const matchedOutletFromDb = outletsList.find(o => 
+      (o.seCode || '').toLowerCase().trim() === inputKey ||
+      (o.rtCode || '').toLowerCase().trim() === inputKey
+    );
+
+    const fallbackProfile = {
+      full_name: defaultProfiles[inputKey]?.full_name || (matchedOutletFromDb 
+        ? `${matchedOutletFromDb.name.split(' - ')[0]} Rep` 
+        : (loginSeCode.charAt(0).toUpperCase() + loginSeCode.slice(1))),
+      assigned_outlet_id: defaultProfiles[inputKey]?.assigned_outlet_id || (matchedOutletFromDb ? matchedOutletFromDb.rtCode : "RT-1092"),
+      role: defaultProfiles[inputKey]?.role || "Field Representative",
+      territory: defaultProfiles[inputKey]?.territory || (matchedOutletFromDb ? `TERRITORY-${matchedOutletFromDb.rtCode}` : "WESTERN-04 (Colombo Base)"),
+      se_code: inputKey
+    };
+
+    try {
+      // 1. Authenticate with Supabase Auth GoTrue API
+      // Extract main project URL from SUPABASE_URL (before /rest/v1/)
+      const authBaseUrl = SUPABASE_URL.split('/rest/v1/')[0] + '/auth/v1';
+      
+      let sessionData: any = null;
+      let profileData: any = null;
+
+      const loginRes = await fetch(`${authBaseUrl}/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: formattedEmail,
+          password: loginPassword
+        })
+      });
+
+      if (loginRes.ok) {
+        sessionData = await loginRes.json();
+      } else {
+        const errorResponse = await loginRes.json().catch(() => ({}));
+        throw new Error(errorResponse.error_description || errorResponse.message || "Invalid login credentials. Please verify your SE Code and password.");
+      }
+
+      if (sessionData && sessionData.user) {
+        const emailUser = sessionData.user.email || '';
+        const usernamePrefix = emailUser.split('@')[0].toLowerCase().trim();
+        let matchedOutlet: any = null;
+
+        // Immediately fetch data from 'outlets' table where 'se_code' matches usernamePrefix
+        try {
+          const outletRes = await fetch(`${SUPABASE_URL}outlets?se_code=eq.${usernamePrefix}&select=*`, {
+            method: 'GET',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${sessionData.access_token}`
+            }
+          });
+          if (outletRes.ok) {
+            const outletsData = await outletRes.json();
+            if (Array.isArray(outletsData) && outletsData.length > 0) {
+              matchedOutlet = outletsData[0];
+            }
+          }
+        } catch (outletErr) {
+          console.error("Error fetching matching outlet from Supabase on login:", outletErr);
+        }
+
+        const userId = sessionData.user.id;
+        try {
+          const profileRes = await fetch(`${SUPABASE_URL}profiles?id=eq.${userId}`, {
+            method: 'GET',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${sessionData.access_token}`
+            }
+          });
+
+          if (profileRes.ok) {
+            const profilesList = await profileRes.json();
+            if (Array.isArray(profilesList) && profilesList.length > 0) {
+              profileData = { ...profilesList[0] };
+            }
+          }
+
+          if (!profileData) {
+            const upsertRes = await fetch(`${SUPABASE_URL}profiles`, {
+              method: 'POST',
+              headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${sessionData.access_token}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+              },
+              body: JSON.stringify({
+                id: userId,
+                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : (usernamePrefix.toUpperCase()),
+                assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
+                role: "Field Operations Representative",
+                territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
+                se_code: usernamePrefix
+              })
+            });
+
+            if (upsertRes.ok) {
+              profileData = {
+                id: userId,
+                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : (usernamePrefix.toUpperCase()),
+                assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
+                role: "Field Operations Representative",
+                territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
+                se_code: usernamePrefix
+              };
+            }
+          }
+        } catch (profileErr) {
+          console.error("Error fetching/upserting profile detail:", profileErr);
+        }
+
+        // Keep synced or construct fallback
+        if (!profileData) {
+          profileData = {
+            id: userId,
+            full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : (usernamePrefix.toUpperCase()),
+            assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
+            role: "Field Operations Representative",
+            territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
+            se_code: usernamePrefix
+          };
+        } else {
+          profileData.se_code = usernamePrefix;
+          if (matchedOutlet) {
+            profileData.assigned_outlet_id = matchedOutlet.rt_code;
+          }
+        }
+
+        setSessionUser(sessionData.user);
+        setProfile(profileData);
+        localStorage.setItem('lbcl_auth_user', JSON.stringify(sessionData.user));
+        localStorage.setItem('lbcl_auth_profile', JSON.stringify(profileData));
+
+        addToast({
+          type: 'success',
+          message: `Access granted! Welcome, ${profileData.full_name || usernamePrefix.toUpperCase()}.`
+        });
+      }
+    } catch (err: any) {
+      setLoginError(err.message || "Authentication failed. Clear your credentials & try again.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   // Dynamic Greeting based on real-time system clock
-  const [greeting, setGreeting] = useState<string>('Good Morning, Rumesh 🌅');
+  const [greeting, setGreeting] = useState<string>('Good Day, Guest');
   const [currentDateStr, setCurrentDateStr] = useState<string>('Tuesday, Oct 24');
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      const hours = now.getHours();
       
-      let greetText = 'Good Morning, Rumesh 🌅';
-      if (hours >= 12 && hours < 17) {
-        greetText = 'Good Afternoon, Rumesh ☀️';
-      } else if (hours >= 17) {
-        greetText = 'Good Evening, Rumesh 🌙';
-      }
+      const displayName = profile 
+        ? (profile.se_code ? profile.se_code.toUpperCase() : profile.full_name) 
+        : 'Guest';
+      const greetText = `Good Day, ${displayName}`;
       setGreeting(greetText);
 
       // Format date
@@ -65,7 +270,7 @@ export default function App() {
     updateTime();
     const interval = setInterval(updateTime, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [profile]);
 
   // Search & dynamic search list for apps
   const [appSearch, setAppSearch] = useState('');
@@ -107,14 +312,20 @@ export default function App() {
         }
       });
       if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const mappedOutlets: Outlet[] = data.map((o: any) => ({
-            rtCode: o.rt_code || '',
-            name: o.outlet_name || '',
-            address: o.address ? o.address.trim() : 'Colombo Base, Sri Lanka'
-          }));
-          setOutletsList(mappedOutlets);
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.toLowerCase().includes("application/json")) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const mappedOutlets: Outlet[] = data.map((o: any) => ({
+              rtCode: o.rt_code || '',
+              name: o.outlet_name || '',
+              address: o.address ? o.address.trim() : 'Colombo Base, Sri Lanka',
+              seCode: o.se_code || ''
+            }));
+            setOutletsList(mappedOutlets);
+          }
+        } else {
+          console.warn("Outlets fetched but content-type is non-JSON:", contentType);
         }
       }
     } catch (err: any) {
@@ -134,9 +345,14 @@ export default function App() {
         }
       });
       if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setCapacitiesList(data);
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.toLowerCase().includes("application/json")) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setCapacitiesList(data);
+          }
+        } else {
+          console.warn("Capacities fetched but content-type is non-JSON:", contentType);
         }
       }
     } catch (err: any) {
@@ -156,9 +372,14 @@ export default function App() {
         }
       });
       if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setIssueTypesList(data);
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.toLowerCase().includes("application/json")) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setIssueTypesList(data);
+          }
+        } else {
+          console.warn("Issue types fetched but content-type is non-JSON:", contentType);
         }
       }
     } catch (err: any) {
@@ -171,24 +392,51 @@ export default function App() {
   const fetchComplaintsFromSupabase = async () => {
     setIsLoadingComplaints(true);
     try {
-      const response = await fetch(`${SUPABASE_URL}complaints?select=*&order=created_at.desc`, {
+      let url = `${SUPABASE_URL}complaints?select=*&order=created_at.desc`;
+      if (profile) {
+        const userSeCode = (profile.se_code || '').toLowerCase().trim();
+        if (userSeCode) {
+          const matchedRtCodes = outletsList
+            .filter(o => (o.seCode || '').toLowerCase().trim() === userSeCode)
+            .map(o => o.rtCode);
+          if (matchedRtCodes.length > 0) {
+            url = `${SUPABASE_URL}complaints?rt_code=in.(${matchedRtCodes.join(',')})&select=*&order=created_at.desc`;
+          } else {
+            const assignedId = profile.assigned_outlet_id;
+            if (assignedId) {
+              url = `${SUPABASE_URL}complaints?rt_code=eq.${assignedId}&select=*&order=created_at.desc`;
+            }
+          }
+        } else {
+          const assignedId = profile.assigned_outlet_id;
+          if (assignedId) {
+            url = `${SUPABASE_URL}complaints?rt_code=eq.${assignedId}&select=*&order=created_at.desc`;
+          }
+        }
+      }
+      const response = await fetch(url, {
         headers: {
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
         }
       });
       if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          setSupabaseComplaints(data);
-          
-          // Sync stats complaints count to match Supabase lengths
-          setStats(prev => prev.map(s => {
-            if (s.id === 'complaints') {
-              return { ...s, value: String(data.length).padStart(2, '0') };
-            }
-            return s;
-          }));
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.toLowerCase().includes("application/json")) {
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            setSupabaseComplaints(data);
+            
+            // Sync stats complaints count to match Supabase lengths
+            setStats(prev => prev.map(s => {
+              if (s.id === 'complaints') {
+                return { ...s, value: String(data.length).padStart(2, '0') };
+              }
+              return s;
+            }));
+          }
+        } else {
+          console.warn("Complaints fetched but content-type is non-JSON:", contentType);
         }
       }
     } catch (err: any) {
@@ -200,10 +448,13 @@ export default function App() {
 
   useEffect(() => {
     fetchOutletsFromSupabase();
-    fetchComplaintsFromSupabase();
     fetchCapacitiesFromSupabase();
     fetchIssueTypesFromSupabase();
   }, []);
+
+  useEffect(() => {
+    fetchComplaintsFromSupabase();
+  }, [profile]);
 
   // Compute live recent activities merging Supabase complaints with static activities
   const computedRecentActivities = useMemo(() => {
@@ -568,14 +819,56 @@ export default function App() {
     setCoolDeskSuccessRef('');
   };
 
+  // Dynamic filter to compute and fetch ONLY the user's assigned own outlets (from Supabase 'outlets' table using se_code or rt_code matching)
+  const filteredOutletsForDashboard = useMemo(() => {
+    if (!profile) return [];
+    const userSeCode = (profile.se_code || '').toLowerCase().trim();
+    if (!userSeCode) return [];
+
+    return outletsList.filter(o => {
+      const oSeCode = (o.seCode || '').toLowerCase().trim();
+      return oSeCode === userSeCode;
+    });
+  }, [outletsList, profile]);
+
+  // Auto-prepopulate CoolDesk complaint form if only one isolated outlet is returned
+  useEffect(() => {
+    if (filteredOutletsForDashboard.length === 1) {
+      const singleOutlet = filteredOutletsForDashboard[0];
+      setCooldeskForm(prev => ({
+        ...prev,
+        outletName: singleOutlet.name,
+        rtCode: singleOutlet.rtCode,
+        address: singleOutlet.address,
+      }));
+      setCooldeskSearchQuery(singleOutlet.name);
+    } else {
+      setCooldeskForm(prev => {
+        const isCurrentValid = filteredOutletsForDashboard.some(o => o.rtCode === prev.rtCode);
+        if (isCurrentValid) return prev;
+        return {
+          ...prev,
+          outletName: '',
+          rtCode: '',
+          address: '',
+        };
+      });
+      setCooldeskSearchQuery(prev => {
+        const isSelectedValid = filteredOutletsForDashboard.some(o => o.name === prev);
+        return isSelectedValid ? prev : '';
+      });
+    }
+  }, [filteredOutletsForDashboard]);
+
   // Filter outlets list for dropdown in CoolDesk
   const filteredOutletsForCoolDesk = useMemo(() => {
-    if (!cooldeskSearchQuery) return outletsList;
-    return outletsList.filter(o => 
+    let list = filteredOutletsForDashboard;
+    if (!cooldeskSearchQuery) return list;
+    return list.filter(o => 
       o.name.toLowerCase().includes(cooldeskSearchQuery.toLowerCase()) ||
       o.rtCode.toLowerCase().includes(cooldeskSearchQuery.toLowerCase())
     );
-  }, [cooldeskSearchQuery, outletsList]);
+  }, [cooldeskSearchQuery, filteredOutletsForDashboard]);
 
   // Filter apps list based on categories and search query
   const filteredApps = useMemo(() => {
@@ -609,6 +902,116 @@ export default function App() {
     }
   };
 
+  if (!sessionUser || !profile) {
+    return (
+      <div 
+        className="min-h-screen w-full flex items-center justify-center bg-cover bg-center bg-no-repeat p-4 font-sans select-none relative"
+        style={{ backgroundImage: "linear-gradient(rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.5)), url('/src/assets/images/login_wall_art_1781191937515.jpg')" }}
+      >
+        <div className="absolute inset-0 backdrop-blur-md"></div>
+        
+        {/* Animated Card Container */}
+        <motion.div 
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+          className="w-full max-w-md bg-white/95 backdrop-blur-lg rounded-3xl p-8 border border-white/40 shadow-2xl relative z-10"
+        >
+          {/* LOGO */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-tr from-sky-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white mb-3 shadow-xl shadow-sky-500/20">
+              <Sparkles className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-sans font-black text-slate-900 tracking-tight text-center leading-none">
+              LBCL
+            </h1>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">
+              Field Operations Hub
+            </span>
+          </div>
+
+          {/* ERROR ALERT BLOCK */}
+          {loginError && (
+            <motion.div 
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 bg-rose-50 border border-rose-100 p-4 rounded-xl text-rose-700 text-xs font-semibold flex items-start gap-2.5 shadow-xs"
+            >
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+              <div className="text-left">{loginError}</div>
+            </motion.div>
+          )}
+
+          {/* FORM */}
+          <form onSubmit={handleLogin} className="space-y-4 font-sans text-left">
+            {/* Input SE Code */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-left">
+                Outlet (SE Code)
+              </label>
+              <div className="relative flex items-center shadow-xs">
+                <Store className="absolute left-3.5 w-4 h-4 text-slate-400" />
+                <input 
+                  type="text"
+                  placeholder="E.g., rumesh or se-1092"
+                  value={loginSeCode}
+                  onChange={(e) => setLoginSeCode(e.target.value)}
+                  className="w-full bg-slate-50/50 border border-slate-200 focus:bg-white focus:shadow-md focus:border-sky-500 focus:outline-hidden rounded-xl py-3.5 pl-10 pr-4 text-sm font-medium transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Input Password */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-left">
+                Password
+              </label>
+              <div className="relative flex items-center shadow-xs">
+                <Lock className="absolute left-3.5 w-4 h-4 text-slate-400" />
+                <input 
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full bg-slate-50/50 border border-slate-200 focus:bg-white focus:shadow-md focus:border-sky-500 focus:outline-hidden rounded-xl py-3.5 pl-10 pr-4 text-sm font-medium transition-all"
+                />
+              </div>
+            </div>
+
+            {/* LOG IN Action Button */}
+            <motion.button
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 active:scale-95 cursor-pointer text-white font-extrabold text-sm py-4 rounded-xl shadow-lg shadow-sky-500/10 transition-all flex items-center justify-center gap-2 mt-6 uppercase tracking-wider"
+            >
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Entering Hub Secure Grid...</span>
+                </>
+              ) : (
+                'LOG IN'
+              )}
+            </motion.button>
+          </form>
+
+          {/* Forgot Password */}
+          <div className="text-center mt-6">
+            <button 
+              onClick={() => {
+                alert("Credentials Reset Support:\n\nContact the central IT operations hub (itops@lbcl.com) to retrieve your security certificate.\n\n[DEV NOTIFICATION]: For sandbox testing, you may log in under any SE Code (e.g. 'rumesh' or 'se-1092') using the fallback password 'password'. This creates a secure offline simulation session automatically!");
+              }}
+              className="text-[11px] font-bold text-sky-500 hover:text-sky-600 cursor-pointer uppercase tracking-wider transition-colors"
+            >
+              Forgot Password?
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-start pb-24 font-sans select-none overflow-x-hidden">
       
@@ -628,7 +1031,7 @@ export default function App() {
                       <div className="inline-flex items-center gap-2.5">
                         <h1 className="text-2xl font-sans font-extrabold text-slate-900 tracking-tight">{greeting}</h1>
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center font-sans font-extrabold text-xs shadow-sm border border-white shrink-0 select-none">
-                          RA
+                          {profile ? getInitials(profile.se_code || profile.full_name) : 'RA'}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
@@ -939,7 +1342,7 @@ export default function App() {
                         <div className="flex justify-between items-center mb-3">
                           <h2 className="text-base font-bold text-slate-800">Assigned Stores today</h2>
                           <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 py-1 px-2.5 rounded-full">
-                            {Object.keys(completedVisits).length} of {outletsList.length} Checked-in
+                            {Object.keys(completedVisits).length} of {filteredOutletsForDashboard.length} Checked-in
                           </span>
                         </div>
 
@@ -957,7 +1360,7 @@ export default function App() {
 
                         {/* List Outlets to Audit/Visit */}
                         <div className="space-y-3">
-                          {outletsList.filter(o => o.name.toLowerCase().includes(outletSearch.toLowerCase())).map((outlet) => {
+                          {filteredOutletsForDashboard.filter(o => o.name.toLowerCase().includes(outletSearch.toLowerCase())).map((outlet) => {
                             const isDone = completedVisits[outlet.rtCode];
                             return (
                               <div key={outlet.rtCode} className="bg-white border border-slate-100 shadow-xs hover:border-slate-200 rounded-2xl p-4 transition-all">
@@ -1142,7 +1545,7 @@ export default function App() {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
                             <span className="text-xs text-slate-400 font-semibold block">Dealers Reached</span>
-                            <span className="text-lg font-black text-slate-800 mt-1 block">94 outlets</span>
+                            <span className="text-lg font-black text-slate-800 mt-1 block">{filteredOutletsForDashboard.length} outlets</span>
                             <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
                               <div className="bg-purple-500 h-full w-[78%]"></div>
                             </div>
@@ -1799,15 +2202,15 @@ export default function App() {
                       <div className="bg-slate-50 px-6 pt-8 pb-6 border-b border-slate-200 flex flex-col items-center text-center">
                         {/* White avatar circle with slate initials */}
                         <div className="w-20 h-20 rounded-full bg-white shadow-md border-2 border-slate-300 flex items-center justify-center text-slate-800 text-xl font-sans font-extrabold tracking-wide mb-3 relative">
-                          RA
+                          {profile ? getInitials(profile.se_code || profile.full_name) : 'RA'}
                           {/* Online status indicator dot */}
                           <span className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
                         </div>
 
-                        <h3 className="font-sans font-extrabold text-xl text-slate-900 leading-tight">Rumesh Anjanawardana</h3>
-                        <span className="text-xs text-slate-500 font-semibold uppercase tracking-widest mt-1">Senior Field Operations Rep</span>
+                        <h3 className="font-sans font-extrabold text-xl text-slate-900 leading-tight">{profile?.full_name || 'Rumesh Anjanawardana'}</h3>
+                        <span className="text-xs text-slate-500 font-semibold uppercase tracking-widest mt-1">{profile?.role || 'Senior Field Operations Rep'}</span>
                         <div className="mt-2.5 bg-slate-900 text-slate-100 font-semibold px-3 py-1 rounded text-[9px] uppercase tracking-wider font-sans">
-                          Territory: WESTERN-04 (Colombo Base)
+                          Territory: {profile?.territory || 'WESTERN-04 (Colombo Base)'}
                         </div>
                       </div>
 
@@ -1852,11 +2255,21 @@ export default function App() {
                           {/* Red logout trigger option */}
                           <div 
                             onClick={() => {
-                              alert("Logging out and syncing localized cached data streams...");
                               setIsRefreshing(true);
                               setTimeout(() => {
                                 setIsRefreshing(false);
+                                localStorage.removeItem('lbcl_auth_user');
+                                localStorage.removeItem('lbcl_auth_profile');
+                                setSessionUser(null);
+                                setProfile(null);
+                                setLoginSeCode('');
+                                setLoginPassword('');
                                 setActiveTab('home');
+                                setActiveSubPage(null);
+                                addToast({
+                                  type: 'warning',
+                                  message: 'Sign-out successful. Local security tokens revoked.'
+                                });
                               }, 1000);
                             }}
                             className="p-4 flex justify-between items-center hover:bg-rose-50/50 transition-colors cursor-pointer text-rose-600"

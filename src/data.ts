@@ -45,6 +45,7 @@ export interface Outlet {
   rtCode: string;
   name: string;
   address: string;
+  seCode?: string;
 }
 
 export const APP_LIST: AppConfig[] = [
@@ -52,7 +53,7 @@ export const APP_LIST: AppConfig[] = [
     id: 'cooldesk',
     name: 'CoolDesk',
     description: 'Cooler Complaint Management',
-    backgroundImage: 'https://images.unsplash.com/photo-1588854337236-6889d631faa8?auto=format&fit=crop&w=600&q=80',
+    backgroundImage: '/src/assets/images/water_shade_glass_1781191625143.jpg',
     icon: 'ThermometerSnowflake',
     accent: '#0EA5E9',
     topBorder: '#0EA5E9',
@@ -175,13 +176,13 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
 ];
 
 export const OUTLETS_DATA: Outlet[] = [
-  { rtCode: 'RT-1092', name: 'Cargills Food City - Colombo 03', address: '243 Galle Rd, Colombo 00300, Sri Lanka' },
-  { rtCode: 'RT-4482', name: 'Softlogic Glomark - Kottawa', address: '45 High Level Rd, Pannipitiya 10230, Sri Lanka' },
-  { rtCode: 'RT-9938', name: 'Keells Super - Union Place', address: '115 Union Pl, Colombo 00200, Sri Lanka' },
-  { rtCode: 'RT-2231', name: 'Arpico Supercentre - Hyde Park', address: '69 Hyde Park Corner, Colombo 00200, Sri Lanka' },
-  { rtCode: 'RT-8541', name: 'Cargills Food City - Mount Lavinia', address: '382 Galle Rd, Mount Lavinia 10370, Sri Lanka' },
-  { rtCode: 'RT-6712', name: 'Sudarshana Grocery Store', address: '12 Temple Rd, Maharagama 10280, Sri Lanka' },
-  { rtCode: 'RT-3044', name: 'Nilmini Mini Mart', address: '55 Kandy Rd, Kiribathgoda 11850, Sri Lanka' },
+  { rtCode: 'RT-1092', name: 'Cargills Food City - Colombo 03', address: '243 Galle Rd, Colombo 00300, Sri Lanka', seCode: 'rumesh' },
+  { rtCode: 'RT-4482', name: 'Softlogic Glomark - Kottawa', address: '45 High Level Rd, Pannipitiya 10230, Sri Lanka', seCode: 'dilshan' },
+  { rtCode: 'RT-9938', name: 'Keells Super - Union Place', address: '115 Union Pl, Colombo 00200, Sri Lanka', seCode: 'nisansala' },
+  { rtCode: 'RT-2231', name: 'Arpico Supercentre - Hyde Park', address: '69 Hyde Park Corner, Colombo 00200, Sri Lanka', seCode: 'asanka' },
+  { rtCode: 'RT-8541', name: 'Cargills Food City - Mount Lavinia', address: '382 Galle Rd, Mount Lavinia 10370, Sri Lanka', seCode: 'rumesh' },
+  { rtCode: 'RT-6712', name: 'Sudarshana Grocery Store', address: '12 Temple Rd, Maharagama 10280, Sri Lanka', seCode: 'dilshan' },
+  { rtCode: 'RT-3044', name: 'Nilmini Mini Mart', address: '55 Kandy Rd, Kiribathgoda 11850, Sri Lanka', seCode: 'asanka' },
 ];
 
 export const RECENT_ACTIVITIES: RecentActivityItem[] = [
