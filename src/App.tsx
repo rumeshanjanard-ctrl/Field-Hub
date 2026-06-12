@@ -12,7 +12,8 @@ import {
   ThermometerSnowflake, Bell, ArrowRight, ChevronRight, Search, 
   MapPin, LogOut, Loader2, Check, Send, Sparkles, Phone, User, Info, 
   Plus, X, CheckCircle, RefreshCw, SlidersHorizontal, ChevronLeft,
-  DollarSign, Activity, Eye, Play, Star, Circle, Landmark, Target, Lock
+  DollarSign, Activity, Eye, Play, Star, Circle, Landmark, Target, Lock,
+  Sun, Moon, Bluetooth, Printer, Settings, Globe, Trash2
 } from 'lucide-react';
 import { 
   APP_LIST, 
@@ -140,12 +141,311 @@ const isMatchingSeCode = (userSeCode: string, outletSeCode: string, outletRtCode
   return false;
 };
 
+const translations = {
+  EN: {
+    settingsTitle: "Terminal Settings",
+    settingsSub: "Application Preferences & Hardware Configuration",
+    
+    // Theme
+    themeLabel: "Midnight Mode (Dark Theme)",
+    themeDesc: "Toggle dark layout canvas to protect eyes during early morning or late night operations",
+    lightMode: "Light Mode",
+    darkMode: "Dark Mode",
+    
+    // Language
+    langLabel: "Terminal Language (භාෂාව)",
+    langDesc: "Switch app descriptions between English and Sinhala",
+    
+    // Account details
+    accountTitle: "Account & Profile",
+    accountSinhala: "පෞද්ගලික තොරතුරු",
+    accountDesc: "Review current Field Representative profile registry",
+    fullName: "Full Name",
+    seCode: "Service SE Code",
+    email: "Corporate Email Address",
+    phone: "Contact Mobile",
+    lockNote: "Contact Admin to alter profile details.",
+    
+    // Change Password
+    changePassTitle: "Change Account Password",
+    currentPass: "Current Password",
+    newPass: "New Password",
+    confirmPass: "Confirm New Password",
+    updatePassBtn: "Update Credentials via Supabase",
+    
+    // Device & Sync
+    syncTitle: "Device & Sync Engine",
+    syncSinhala: "ෆීල්ඩ් මෙහෙයුම් සඳහා",
+    syncDesc: "Manage offline logs and sync indicators",
+    manualSyncBtn: "Force Cloud Synchronization",
+    syncSuccess: "Database completely synchronized with Supabase!",
+    clearCacheBtn: "Wipe Local Sandbox Cache",
+    clearCacheDesc: "Purge cached images, outlets database, and temporary session keys",
+    confirmClearTitle: "Are you absolutely sure?",
+    confirmClearDesc: "This will wipe all cached stores, disconnect print interfaces, and reset the app. Unsaved offline reports might be lost.",
+    confirmYes: "Yes, Reset Memory",
+    confirmNo: "Cancel",
+    storageStatus: "Local App Storage Status",
+    spaceUsed: "4.8 MB of cache space occupied",
+    
+    // Printer settings
+    printerTitle: "Hardware & Printer Setup",
+    printerSinhala: "ලොජිස්ටික්ස් සහ ප්රින්ටින්",
+    printerDesc: "Establish wireless connection with thermal POS terminal",
+    printerBt: "Bluetooth Connection Indicator",
+    searchDevices: "Scan for Bluetooth Printers",
+    connectedText: "Connected & Calibrated",
+    disconnectBtn: "Disconnect",
+    testPrintBtn: "Dispatch Test Slip",
+    testPrintDisabled: "Requires Active Printer Hook",
+    receiptNotesLabel: "Custom Footnote Note",
+    receiptNotesPlaceholder: "e.g., Thank you! - Lion Brewery PLC",
+    scannedTitle: "Scanned Bluetooth Terminals",
+    
+    // Receipt test preview popup
+    slipPreviewTitle: "Thermal Slip Test Output",
+    slipMockText: "LION BREWERY TERMINAL SLIP",
+    slipPrintedAt: "Printed at: ",
+    slipFooter: "Footer Note appended:"
+  },
+  SI: {
+    settingsTitle: "පර්යන්ත සැකසුම්",
+    settingsSub: "යෙදුම් මනාප සහ දෘඩාංග වින්‍යාසය",
+    
+    // Theme
+    themeLabel: "රාත්‍රී ප්‍රකාරය (අඳුරු තේමාව)",
+    themeDesc: "අලුයම හෝ ප්‍රමාද රාත්‍රී මෙහෙයුම් වලදී ඇස් ආරක්ෂා කිරීමට අඳුරු පිරිසැලසුම සක්‍රිය කරන්න",
+    lightMode: "දිවා ප්‍රකාරය",
+    darkMode: "රාත්‍රී ප්‍රකාරය",
+    
+    // Language
+    langLabel: "පර්යන්ත භාෂාව (Language)",
+    langDesc: "යෙදුමේ විස්තර ඉංග්‍රීසි සහ සිංහල අතර මාරු කරන්න",
+    
+    // Account details
+    accountTitle: "ගිණුම සහ පැතිකඩ",
+    accountSinhala: "පෞද්ගලික තොරතුරු",
+    accountDesc: "වත්මන් ක්ෂේත්‍ර නියෝජිත ලේඛනය සමාලෝචනය කරන්න",
+    fullName: "සම්පූර්ණ නම",
+    seCode: "සේවා කේතය (SE Code)",
+    email: "ආයතනික විද්‍යුත් තැපෑල",
+    phone: "දුරකථන අංකය",
+    lockNote: "පැතිකඩ විස්තර වෙනස් කිරීමට පරිපාලක අමතන්න.",
+    
+    // Change Password
+    changePassTitle: "ගිණුමේ මුරපදය වෙනස් කරන්න",
+    currentPass: "වත්මන් මුරපදය",
+    newPass: "නව මුරපදය",
+    confirmPass: "නව මුරපදය තහවුරු කරන්න",
+    updatePassBtn: "Supabase හරහා මුරපදය යාවත්කාලීන කරන්න",
+    
+    // Device & Sync
+    syncTitle: "උපාංග සහ දත්ත සමමුහුර්තකරණය",
+    syncSinhala: "ෆීල්ඩ් මෙහෙයුම් සඳහා",
+    syncDesc: "නොබැඳි දත්ත සහ සමමුහුර්ත හස්තීය මෙහෙයුම්",
+    manualSyncBtn: "වලාකුළු සමමුහුර්තකරණය ක්‍රියාත්මක කරන්න",
+    syncSuccess: "දත්ත සියල්ල සාර්ථකව Supabase වෙත උඩුගත කරන ලදී!",
+    clearCacheBtn: "දේශීය දත්ත ගබඩා ඉවත් කරන්න",
+    clearCacheDesc: "තාවකාලික රූප, පර්යන්ත දත්ත සහ සැසි තොරතුරු සම්පූර්ණයෙන්ම මකා දමන්න",
+    confirmClearTitle: "ඔබට විශ්වාසද?",
+    confirmClearDesc: "මෙය ඔබගේ එකතු කරන ලද දත්ත මකා දමන අතර මුද්‍රණ යන්ත්‍ර විසන්ධි කර යෙදුම නැවත සකසනු ඇත.",
+    confirmYes: "ඔව්, දත්ත මකන්න",
+    confirmNo: "අවලංගු කරන්න",
+    storageStatus: "දේශීය දත්ත ගබඩා තත්ත්වය",
+    spaceUsed: "දත්ත මෙගාබයිට් 4.8ක් භාවිතා කර ඇත",
+    
+    // Printer settings
+    printerTitle: "දෘඩාංග සහ මුද්‍රණ යන්ත්‍ර සැකසුම",
+    printerSinhala: "ලොජිස්ටික්ස් සහ ප්රින්ටින්",
+    printerDesc: "රසිට්පත් මුද්‍රණ යන්ත්‍රය මෙතනින් සම්බන්ධ කරන්න",
+    printerBt: "Bluetooth සම්බන්ධතා තත්ත්වය",
+    searchDevices: "මුද්‍රණ යන්ත්‍ර සොයන්න",
+    connectedText: "සාර්ථකව සම්බන්ධ කර ඇත",
+    disconnectBtn: "විසන්ධි කරන්න",
+    testPrintBtn: "පරීක්ෂණ මුද්‍රණයක් ලබා ගන්න",
+    testPrintDisabled: "මුද්‍රණ යන්ත්‍රයක් සම්බන්ධ කර තිබිය යුතුය",
+    receiptNotesLabel: "අතිරේක පාදක සටහන",
+    receiptNotesPlaceholder: "උදා: ස්තුතියි! - සිංහ බීර සමාගම",
+    scannedTitle: "හමු වූ Bluetooth මුද්‍රණ යන්ත්‍ර",
+    
+    // Receipt test preview popup
+    slipPreviewTitle: "පරීක්ෂණ මුද්‍රණ පෙරදසුන",
+    slipMockText: "සිංහ බීර සමාගම් රිසිට්පත",
+    slipPrintedAt: "මුද්‍රිත වේලාව: ",
+    slipFooter: "එක් කරන ලද පාදක සටහන:"
+  }
+};
+
 export default function App() {
   // Page routing and tab states
-  // tab: 'home' | 'apps' | 'alerts' | 'profile'
-  const [activeTab, setActiveTab] = useState<'home' | 'apps' | 'alerts' | 'profile'>('home');
+  // tab: 'home' | 'competitor' | 'profile'
+  const [activeTab, setActiveTab] = useState<'home' | 'competitor' | 'profile'>('home');
+
+  // Competitor Tracking State and Form Configs
+  interface CompetitorRecord {
+    id: string;
+    outletName: string;
+    rtCode: string;
+    competitorBrand: string;
+    skuName: string;
+    skuQty: string;
+    skuPrice: string;
+    invoicePhoto: string | null;
+    notes: string;
+    date: string;
+  }
+
+  const [competitorRecords, setCompetitorRecords] = useState<CompetitorRecord[]>(() => {
+    const cached = localStorage.getItem('lbcl_competitor_records');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return [
+      {
+        id: 'competitor-1',
+        outletName: 'Cargills Food City - Colombo 03',
+        rtCode: 'RT-1092',
+        competitorBrand: 'Carlsberg',
+        skuName: 'Carlsberg Premium Can 500ml',
+        skuQty: '15',
+        skuPrice: '6750',
+        invoicePhoto: null,
+        notes: 'Price adjustment noticed on premium can SKUs in this territory.',
+        date: '2026-06-11'
+      },
+      {
+        id: 'competitor-2',
+        outletName: 'Keells Super - Union Place',
+        rtCode: 'RT-9938',
+        competitorBrand: 'Heineken',
+        skuName: 'Heineken Lager Bottle 330ml',
+        skuQty: '30',
+        skuPrice: '15600',
+        invoicePhoto: null,
+        notes: 'Enhanced refrigerator shelf space allocation for competitors.',
+        date: '2026-06-12'
+      }
+    ];
+  });
+
+  const [isAddTrackingOpen, setIsAddTrackingOpen] = useState(false);
+  const [trackingForm, setTrackingForm] = useState<{
+    outletRtCode: string;
+    competitorBrand: string;
+    skuName: string;
+    skuQty: string;
+    skuPrice: string;
+    invoicePhoto: string | null;
+    notes: string;
+  }>({
+    outletRtCode: '',
+    competitorBrand: 'Carlsberg',
+    skuName: '',
+    skuQty: '',
+    skuPrice: '',
+    invoicePhoto: null,
+    notes: ''
+  });
+
+  // Save competitor records to local storage on modification
+  useEffect(() => {
+    localStorage.setItem('lbcl_competitor_records', JSON.stringify(competitorRecords));
+  }, [competitorRecords]);
   // subPage allows full deep dive into specific apps
   const [activeSubPage, setActiveSubPage] = useState<string | null>(null);
+
+  // --- THEME & LANGUAGE STATE ---
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('lbcl_app_theme') as 'light' | 'dark') || 'light';
+  });
+  const [language, setLanguage] = useState<'EN' | 'SI'>(() => {
+    return (localStorage.getItem('lbcl_app_lang') as 'EN' | 'SI') || 'EN';
+  });
+
+  // Save layout configurations on changes
+  useEffect(() => {
+    localStorage.setItem('lbcl_app_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('lbcl_app_lang', language);
+  }, [language]);
+
+  // --- PASSWORD CHANGE STATE ---
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isPasswordExpanded, setIsPasswordExpanded] = useState(false);
+
+  // --- DEVICE & SYNC STATE ---
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isClearCacheConfirmOpen, setIsClearCacheConfirmOpen] = useState(false);
+
+  // --- BLUETOOTH PRINTER MANAGEMENT ---
+  const [printerStatus, setPrinterStatus] = useState<'disconnected' | 'searching' | 'connected'>(() => {
+    return (localStorage.getItem('lbcl_printer_status') as any) || 'disconnected';
+  });
+  const [connectedPrinter, setConnectedPrinter] = useState<string | null>(() => {
+    return localStorage.getItem('lbcl_connected_printer') || null;
+  });
+  const [scannedPrinters, setScannedPrinters] = useState<any[]>([]);
+  const [receiptFooter, setReceiptFooter] = useState<string>(() => {
+    return localStorage.getItem('lbcl_receipt_footer') || 'Thank You! - Lion Brewery';
+  });
+  const [showSlipTestModal, setShowSlipTestModal] = useState(false);
+
+  // Save receipt/printer details
+  useEffect(() => {
+    localStorage.setItem('lbcl_printer_status', printerStatus);
+  }, [printerStatus]);
+  useEffect(() => {
+    if (connectedPrinter) localStorage.setItem('lbcl_connected_printer', connectedPrinter);
+    else localStorage.removeItem('lbcl_connected_printer');
+  }, [connectedPrinter]);
+  useEffect(() => {
+    localStorage.setItem('lbcl_receipt_footer', receiptFooter);
+  }, [receiptFooter]);
+
+  // --- BLUETOOTH PRINTER HANDLERS ---
+  const startScanningPrinters = () => {
+    setPrinterStatus('searching');
+    setScannedPrinters([]);
+    setTimeout(() => {
+      setScannedPrinters([
+        { name: 'Bixolon_SPP_R200', address: '00:08:1B:95:2D:33', status: 'Available' },
+        { name: 'Bixolon_SPP_R210_POS', address: '00:08:1B:95:2D:4F', status: 'Paired' },
+        { name: 'SZZT_KS8223_Printer', address: '64:1A:DF:7B:A1:02', status: 'Available' }
+      ]);
+      setPrinterStatus('disconnected');
+    }, 2000);
+  };
+
+  const connectPrinterDevice = (printerName: string) => {
+    setPrinterStatus('connected');
+    setConnectedPrinter(printerName);
+    addToast({
+      type: 'success',
+      message: `${printerName} connected successfully!`
+    });
+  };
+
+  const disconnectPrinterDevice = () => {
+    const oldName = connectedPrinter;
+    setPrinterStatus('disconnected');
+    setConnectedPrinter(null);
+    setScannedPrinters([]);
+    if (oldName) {
+      addToast({
+        type: 'success',
+        message: `${oldName} has been disconnected.`
+      });
+    }
+  };
 
   // --- SUPABASE SESSION AUTHENTICATION STATE ---
   const [sessionUser, setSessionUser] = useState<any>(() => {
@@ -1172,11 +1472,59 @@ export default function App() {
     );
   }
 
+  const curLang = language === 'SI' ? translations.SI : translations.EN;
+
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-start pb-24 font-sans select-none overflow-x-hidden">
+    <div className={`min-h-screen flex flex-col items-center justify-start pb-24 font-sans select-none overflow-x-hidden ${theme === 'dark' ? 'theme-dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+      
+      {/* Dynamic Theme Style Overrides */}
+      <style>{`
+        .theme-dark {
+          background-color: #020617 !important;
+        }
+        .theme-dark .bg-white {
+          background-color: #0f172a !important;
+        }
+        .theme-dark .bg-slate-50, .theme-dark .bg-slate-100, .theme-dark .bg-indigo-50\\/50 {
+          background-color: #1e293b !important;
+        }
+        .theme-dark .text-slate-900, .theme-dark .text-slate-800, .theme-dark .text-slate-950 {
+          color: #f8fafc !important;
+        }
+        .theme-dark .text-slate-700, .theme-dark .text-slate-600 {
+          color: #cbd5e1 !important;
+        }
+        .theme-dark .text-slate-500, .theme-dark .text-slate-400 {
+          color: #94a3b8 !important;
+        }
+        .theme-dark .border-slate-250, .theme-dark .border-slate-200, .theme-dark .border-slate-100, .theme-dark .border-slate-300 {
+          border-color: #334155 !important;
+        }
+        .theme-dark header, .theme-dark nav {
+          background-color: #0f172a !important;
+          border-color: #334155 !important;
+        }
+        .theme-dark .nav-white {
+          background-color: #0f172a !important;
+        }
+        .theme-dark input, .theme-dark select, .theme-dark textarea {
+          background-color: #1e293b !important;
+          color: #ffffff !important;
+          border-color: #475569 !important;
+        }
+        .theme-dark input:focus, .theme-dark select:focus, .theme-dark textarea:focus {
+          border-color: #0ea5e9 !important;
+        }
+        .theme-dark .shadow-sm, .theme-dark .shadow-md, .theme-dark .shadow-xs {
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3) !important;
+        }
+        .theme-dark hr {
+          border-color: #334155 !important;
+        }
+      `}</style>
       
       {/* Maximum Container matching modern preview layouts */}
-      <div className="w-full max-w-md md:max-w-3xl bg-white min-h-screen relative flex flex-col justify-between overflow-hidden">
+      <div className={`w-full max-w-md md:max-w-3xl min-h-screen relative flex flex-col justify-between overflow-hidden shadow-2xl border-x ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}>
         
         {/* Dynamic sliding container for beautiful route transitions */}
         <div className="flex-1 flex flex-col">
@@ -1190,9 +1538,6 @@ export default function App() {
                     <>
                       <div className="inline-flex items-center gap-2.5">
                         <h1 className="text-2xl font-sans font-extrabold text-slate-900 tracking-tight">{greeting}</h1>
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center font-sans font-extrabold text-xs shadow-sm border border-white shrink-0 select-none">
-                          {profile ? getInitials(profile.full_name || profile.se_code) : 'RA'}
-                        </div>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] font-sans font-bold text-slate-400 uppercase tracking-widest">{currentDateStr}</span>
@@ -1201,7 +1546,7 @@ export default function App() {
                   ) : (
                     <div className="flex items-baseline gap-1.5">
                       <h1 className="text-2xl font-sans font-extrabold text-slate-900 tracking-tight">
-                        {activeTab === 'apps' ? 'Applications' : activeTab === 'alerts' ? 'Notifications' : 'Field Profile'}
+                        {activeTab === 'competitor' ? (language === 'SI' ? 'තරඟකරුවන්' : 'Competitor Tracking') : (language === 'SI' ? translations.SI.settingsTitle : translations.EN.settingsTitle)}
                       </h1>
                     </div>
                   )}
@@ -2066,12 +2411,6 @@ export default function App() {
                       <div>
                         <div className="flex justify-between items-end mb-4 border-b border-slate-200 pb-2">
                           <h2 className="text-xl font-sans font-extrabold text-slate-900 tracking-tight">Business Systems</h2>
-                          <button 
-                            onClick={() => setActiveTab('apps')} 
-                            className="text-xs font-sans font-bold text-sky-600 hover:text-sky-850 hover:underline tracking-widest uppercase cursor-pointer"
-                          >
-                            Browse All
-                          </button>
                         </div>
                         {/* grid layout representing active launchers */}
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
@@ -2154,310 +2493,454 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* TAB 2: APPLICATIONS (ALL APPS WITH SEARCH & FILTERS) */}
-                  {activeTab === 'apps' && (
+                  {/* TAB 2: COMPETITOR TRACKING SYSTEM */}
+                  {activeTab === 'competitor' && (
                     <div className="px-5 py-4 space-y-5">
                       
-                      {/* Search Bar */}
-                      <div className="relative">
-                        <Search className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
-                        <input 
-                          type="text"
-                          placeholder="Search business tools and workflows..."
-                          value={appSearch}
-                          onChange={(e) => setAppSearch(e.target.value)}
-                          className="w-full bg-white border border-slate-300 rounded-lg py-3.5 pl-10 pr-4 text-xs tracking-wide focus:border-slate-800 focus:outline-hidden transition-all font-semibold font-sans"
-                        />
-                      </div>
-
-                      {/* Filter Chips */}
-                      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                        {(['All', 'Sales', 'Operations', 'Reports'] as const).map((cat) => {
-                          const isSelected = appCategory === cat;
-                          return (
-                            <button
-                              key={cat}
-                              onClick={() => setAppCategory(cat)}
-                              className={`py-1.5 px-4 rounded-md text-[10px] font-bold tracking-wider uppercase transition-all whitespace-nowrap cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-slate-900 text-white shadow-xs' 
-                                  : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              {cat}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Full list grid of apps */}
-                      <div>
-                        <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-1.5">
-                          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                            Available Systems ({filteredApps.length})
+                      {/* Competitor system welcome/stats summary panel */}
+                      <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800 flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-sans font-bold text-sky-400 uppercase tracking-widest block font-mono">
+                            Market Intelligence Engine
+                          </span>
+                          <h3 className="text-sm font-extrabold font-sans">
+                            {language === 'SI' ? 'පිහිටුවීම් සහ ගිණුම්' : 'Active Field Audits'}
                           </h3>
+                          <p className="text-[11px] text-slate-400 font-medium font-sans">
+                            {competitorRecords.length} competitor logs synchronized locally
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setTrackingForm({
+                              outletRtCode: '',
+                              competitorBrand: 'Carlsberg',
+                              skuName: '',
+                              skuQty: '',
+                              skuPrice: '',
+                              invoicePhoto: null,
+                              notes: ''
+                            });
+                            setIsAddTrackingOpen(true);
+                          }}
+                          className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border-none"
+                        >
+                          <Plus className="w-4 h-4 stroke-[2.5]" />
+                          <span>{language === 'SI' ? 'එකතු කරන්න' : 'Add Tracking'}</span>
+                        </button>
+                      </div>
+
+                      {/* Display Saved Competitor Records */}
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {language === 'SI' ? 'පසුගිය වාර්තා' : 'Competitor Activity Feed'} ({competitorRecords.length})
+                          </h3>
+                          <span className="text-[9px] font-extrabold text-slate-400 font-mono">POS Handshake Live</span>
                         </div>
 
-                        {filteredApps.length > 0 ? (
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4 font-sans">
-                            {filteredApps.map((app) => {
-                              const isActive = app.id === 'cooldesk';
-                              return (
-                                <motion.div 
-                                  key={app.id}
-                                  whileHover={isActive ? { y: -3 } : undefined}
-                                  whileTap={isActive ? { scale: 0.98 } : undefined}
-                                  onClick={() => {
-                                    if (isActive) {
-                                      setActiveSubPage(app.id);
-                                    }
-                                  }}
-                                  className={`bg-white rounded-xl overflow-hidden border transition-all flex flex-col h-40 sm:h-56 ${
-                                    isActive 
-                                      ? 'border-slate-200 shadow-xs cursor-pointer group' 
-                                      : 'border-slate-100 opacity-60 select-none cursor-not-allowed bg-slate-50/10'
-                                  }`}
-                                >
-                                  <div className="relative h-[50%] sm:h-[60%] w-full overflow-hidden border-b border-slate-100">
-                                    <img 
-                                      src={app.backgroundImage} 
-                                      alt={app.name} 
-                                      referrerPolicy="no-referrer"
-                                      className={`w-full h-full object-cover transition-transform duration-500 ${
-                                        isActive ? 'group-hover:scale-105' : 'grayscale-[40%]'
-                                      }`}
-                                    />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/30 to-transparent"></div>
-                                    <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 bg-white/95 backdrop-blur-xs p-1 sm:p-1.5 rounded shadow-xs border border-slate-200">
-                                      {renderIcon(app.icon, "w-3.5 h-3.5 sm:w-4 sm:h-4", isActive ? app.accent : "#94A3B8")}
-                                    </div>
+                        {competitorRecords.length > 0 ? (
+                          <div className="space-y-3">
+                            {competitorRecords.map((rec) => (
+                              <motion.div
+                                key={rec.id}
+                                layoutId={rec.id}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs hover:shadow-sm transition-all text-left relative overflow-hidden group"
+                              >
+                                {/* Left accent strip */}
+                                <div className="absolute inset-y-0 left-0 w-1 bg-sky-500"></div>
 
-                                    {/* Locked / Disabled Badge for inactive apps */}
-                                    {!isActive && (
-                                      <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 bg-rose-500/10 backdrop-blur-xs border border-rose-500/20 text-rose-600 text-[7px] sm:text-[8px] font-sans font-extrabold tracking-widest px-1 py-0.5 sm:px-2 sm:py-0.5 rounded uppercase flex items-center gap-0.5 sm:gap-1 shadow-xs">
-                                        <Lock className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
-                                        <span>Locked</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="p-2 sm:p-3.5 flex-1 flex flex-col justify-between" style={{ borderTop: `3px solid ${isActive ? app.accent : "#CBD5E1"}` }}>
-                                    <div>
-                                      <h3 className={`font-sans font-bold text-xs sm:text-sm line-clamp-1 transition-colors ${
-                                        isActive ? 'text-slate-900 group-hover:text-sky-600' : 'text-slate-400'
-                                      }`}>{app.name}</h3>
-                                      <p className={`text-[9px] sm:text-[10px] font-medium leading-tight mt-0.5 line-clamp-1 ${
-                                        isActive ? 'text-slate-400' : 'text-slate-400/70'
-                                      }`}>{app.description}</p>
+                                <div className="flex justify-between items-start gap-2 mb-2">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[9px] font-extrabold tracking-wider font-mono">
+                                        {rec.rtCode}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-bold font-mono">
+                                        {rec.date}
+                                      </span>
                                     </div>
-                                    <div className="flex justify-between items-center mt-1">
-                                      {/* Small indicator pill */}
-                                      {isActive ? (
-                                        <>
-                                          <span className="text-[7px] sm:text-[8px] uppercase tracking-widest font-bold text-slate-400">Launch</span>
-                                          <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 group-hover:translate-x-0.5 transition-all" style={{ color: app.accent }} />
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span className="text-[7px] sm:text-[8px] uppercase tracking-widest font-bold text-slate-400/65">Locked</span>
-                                          <Lock className="w-2.5 h-2.5 text-slate-300" />
-                                        </>
-                                      )}
-                                    </div>
+                                    <h4 className="font-sans font-extrabold text-xs text-slate-900 mt-1.5 group-hover:text-sky-600 transition-colors">
+                                      {rec.outletName}
+                                    </h4>
                                   </div>
-                                </motion.div>
-                              );
-                            })}
+
+                                  <span className="px-2 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[9px] font-extrabold uppercase tracking-widest font-mono">
+                                    {rec.competitorBrand}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-dashed border-slate-100 text-[11px] text-slate-600 font-sans leading-normal">
+                                  <div>
+                                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">SKU & Pack Details</span>
+                                    <span className="font-extrabold text-slate-800 block mt-0.5">{rec.skuName || 'Unspecified SKU'}</span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">Inventory / Price</span>
+                                    <span className="font-extrabold text-emerald-600 block mt-0.5 font-mono">
+                                      {rec.skuQty ? `${rec.skuQty} Cases` : 'No Qty'} • {rec.skuPrice ? `Rs. ${rec.skuPrice}` : 'N/A Price'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {rec.notes && (
+                                  <div className="mt-2.5 bg-slate-50 rounded-lg p-2.5 border border-slate-150 flex gap-2 items-start">
+                                    <span className="text-[14px] leading-none shrink-0 text-slate-400 select-none">✏️</span>
+                                    <p className="text-[10px] font-medium text-slate-500 leading-relaxed font-sans italic">
+                                      "{rec.notes}"
+                                    </p>
+                                  </div>
+                                )}
+
+                                {rec.invoicePhoto && (
+                                  <div className="mt-2.5 rounded-lg overflow-hidden border border-slate-200 h-20 w-fit max-w-full">
+                                    <img src={rec.invoicePhoto} alt="Invoice preview" className="h-full object-cover rounded-md" referrerPolicy="no-referrer" />
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
                           </div>
                         ) : (
-                          <div className="bg-white border border-slate-200 rounded-xl p-8 py-12 text-center text-slate-400">
-                            <Info className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                            <p className="text-sm font-bold text-slate-700">No operations tools found</p>
-                            <p className="text-xs text-slate-400 mt-1">Try resetting filter or search term</p>
+                          <div className="bg-white border border-slate-200 rounded-xl p-8 py-10 text-center text-slate-400 font-sans">
+                            <Store className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                            <p className="text-xs font-bold text-slate-700">No Competitor Tracking recorded yet</p>
+                            <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">
+                              Tap the 'Add Tracking' button above to audit localized competitor presence.
+                            </p>
                           </div>
                         )}
                       </div>
 
-                    </div>
-                  )}
+                      {/* ADD TRACKING DIALOG / MODAL FORM */}
+                      <AnimatePresence>
+                        {isAddTrackingOpen && (
+                          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs select-none">
+                            <motion.div 
+                              initial={{ opacity: 0, scale: 0.94, y: 15 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                              className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-slate-200 font-sans text-left max-h-[90vh] overflow-y-auto"
+                            >
+                              <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-150">
+                                <span className="text-sm font-extrabold flex items-center gap-2 text-slate-900">
+                                  <Activity className="w-4 h-4 text-sky-500" />
+                                  {language === 'SI' ? 'තරඟකාරී තොරතුරු එක් කිරීම' : 'Competitor Audit Log'}
+                                </span>
+                                <button 
+                                  onClick={() => setIsAddTrackingOpen(false)}
+                                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer transition-colors border-none bg-transparent"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
 
-                  {/* TAB 3: NOTIFICATIONS (ALERTS) */}
-                  {activeTab === 'alerts' && (
-                    <div className="px-5 py-4 space-y-5">
-                      
-                      <div className="flex justify-between items-baseline border-b border-slate-200 pb-2">
-                        <h2 className="text-xl font-sans font-extrabold text-slate-900 tracking-tight">Notification Ledger</h2>
-                        <button 
-                          onClick={handleMarkAllNotificationsAsRead}
-                          className="text-xs font-sans font-bold text-sky-600 hover:text-sky-850 uppercase tracking-wider cursor-pointer"
-                        >
-                          Mark all as read
-                        </button>
-                      </div>
-
-                      {/* Grouping */}
-                      {['Today', 'Earlier'].map((groupName) => {
-                        const items = notifications.filter(n => n.group === groupName);
-                        if (items.length === 0) return null;
-                        return (
-                          <div key={groupName} className="space-y-2.5">
-                            <h3 className="text-[10px] font-sans font-bold text-slate-400 uppercase tracking-widest pl-1 mt-1">
-                              {groupName}
-                            </h3>
-
-                            <div className="space-y-2.5">
-                              {items.map((notif) => {
-                                const isError = notif.type === 'error';
-                                const isSuccess = notif.type === 'success';
-                                const isWarning = notif.type === 'warning';
-                                return (
-                                  <div 
-                                    key={notif.id}
-                                    onClick={() => {
-                                      // Toggle unread state manually on click
-                                      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, unread: false } : n));
-                                    }}
-                                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                                      notif.unread 
-                                        ? 'bg-sky-50/50 border-sky-200 hover:bg-sky-50/70 shadow-xs' 
-                                        : 'bg-white border-slate-200 hover:bg-slate-50'
-                                    }`}
+                              <div className="space-y-4 text-xs font-medium text-slate-700">
+                                {/* Outlet Select Dropdown */}
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                                    {language === 'SI' ? 'අවුට්ලට් තෝරන්න' : 'Select Outlet'} *
+                                  </label>
+                                  <select
+                                    value={trackingForm.outletRtCode}
+                                    onChange={(e) => setTrackingForm(prev => ({ ...prev, outletRtCode: e.target.value }))}
+                                    className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500 transition-colors"
                                   >
-                                    <div className="flex gap-3">
-                                      {/* icon indicator circle */}
-                                      <div className={`w-8 h-8 rounded flex-shrink-0 flex items-center justify-center border ${
-                                        isError 
-                                          ? 'bg-rose-50 border-rose-200 text-rose-500' 
-                                          : isSuccess 
-                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-500' 
-                                            : isWarning 
-                                              ? 'bg-amber-50 border-amber-200 text-amber-500' 
-                                              : 'bg-sky-50 border-sky-200 text-sky-500'
-                                      }`}>
-                                        {isError ? (
-                                          <AlertTriangle className="w-4 h-4" />
-                                        ) : isSuccess ? (
-                                          <Check className="w-4 h-4" />
-                                        ) : (
-                                          <Info className="w-4 h-4" />
-                                        )}
-                                      </div>
+                                    <option value="">-- Click to choose Outlet --</option>
+                                    {outletsList.map((outlet) => (
+                                      <option key={outlet.rtCode} value={outlet.rtCode}>
+                                        [{outlet.rtCode}] {outlet.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
 
-                                      <div className="flex-1 text-left">
-                                        <div className="flex justify-between items-start mb-0.5">
-                                          <h4 className="font-bold text-xs text-slate-800">{notif.title}</h4>
-                                          <span className="text-[9px] font-semibold text-slate-400 font-sans">{notif.time}</span>
-                                        </div>
-                                        <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{notif.description}</p>
-                                      </div>
+                                {/* Competitor Brand Dropdown */}
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                                    {language === 'SI' ? 'තරඟකාරී සන්නාමය' : 'Competitor Brand'} *
+                                  </label>
+                                  <select
+                                    value={trackingForm.competitorBrand}
+                                    onChange={(e) => setTrackingForm(prev => ({ ...prev, competitorBrand: e.target.value }))}
+                                    className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500"
+                                  >
+                                    <option value="Carlsberg">Carlsberg</option>
+                                    <option value="Heineken">Heineken</option>
+                                    <option value="Tiger">Tiger</option>
+                                    <option value="Anchor">Anchor</option>
+                                    <option value="Somersby">Somersby</option>
+                                    <option value="BGI">BGI</option>
+                                    <option value="Three Coins">Three Coins</option>
+                                    <option value="Other">Other Brand</option>
+                                  </select>
+                                </div>
+
+                                {/* SKU Details inputs */}
+                                <div className="p-3 bg-slate-50 border border-slate-150 rounded-2xl space-y-3">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block border-b border-slate-200 pb-1">
+                                    SKU & Pack Particulars
+                                  </span>
+                                  
+                                  <div>
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">
+                                      {language === 'SI' ? 'පැකේජ විස්තරය' : 'SKU Details / Pack Size'}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g., Carlsberg Pilsner Can 500ml"
+                                      value={trackingForm.skuName}
+                                      onChange={(e) => setTrackingForm(prev => ({ ...prev, skuName: e.target.value }))}
+                                      className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:border-sky-500"
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">
+                                        Quantity (Cases)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={trackingForm.skuQty}
+                                        onChange={(e) => setTrackingForm(prev => ({ ...prev, skuQty: e.target.value }))}
+                                        className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:border-sky-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">
+                                        Casing Price (LKR)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        placeholder="LKR"
+                                        value={trackingForm.skuPrice}
+                                        onChange={(e) => setTrackingForm(prev => ({ ...prev, skuPrice: e.target.value }))}
+                                        className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:border-sky-500"
+                                      />
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
+                                </div>
+
+                                {/* Invoice Photo capture / selection */}
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                                    {language === 'SI' ? 'ඉන්වොයිස් පින්තූරය' : 'Invoice Photo'}
+                                  </label>
+                                  
+                                  <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center space-y-2 bg-slate-550">
+                                    {trackingForm.invoicePhoto ? (
+                                      <div className="relative inline-block">
+                                        <img 
+                                          src={trackingForm.invoicePhoto} 
+                                          alt="Invoice preview" 
+                                          className="mx-auto max-h-32 rounded-lg border object-contain shadow-xs" 
+                                          referrerPolicy="no-referrer"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setTrackingForm(prev => ({ ...prev, invoicePhoto: null }))}
+                                          className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 cursor-pointer shadow-md border-none"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col items-center justify-center py-2">
+                                        <span className="text-[16px] mb-1">📷</span>
+                                        <span className="text-[10px] text-slate-400 font-bold mb-1.5 block">Record competitor bill physically</span>
+                                        
+                                        <div className="flex gap-2">
+                                          {/* Standard Native File picker */}
+                                          <label className="bg-white hover:bg-slate-50 text-slate-705 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-[10px] shadow-xs cursor-pointer flex items-center gap-1">
+                                            <span>Attach Picture</span>
+                                            <input 
+                                              type="file" 
+                                              accept="image/*" 
+                                              className="hidden" 
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                  const reader = new FileReader();
+                                                  reader.onloadend = () => {
+                                                    setTrackingForm(prev => ({ ...prev, invoicePhoto: reader.result as string }));
+                                                  };
+                                                  reader.readAsDataURL(file);
+                                                }
+                                              }}
+                                            />
+                                          </label>
+
+                                          {/* Mock generator button */}
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              // High quality base64 placeholder for an invoice representation
+                                              setTrackingForm(prev => ({
+                                                ...prev,
+                                                invoicePhoto: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=400&q=80'
+                                              }));
+                                            }}
+                                            className="bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 font-semibold px-2.5 py-1.5 rounded-lg text-[10px] cursor-pointer"
+                                          >
+                                            Demo Snap
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Notes Notepad field */}
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                                    {language === 'SI' ? 'සටහන්' : 'Observations Notes'}
+                                  </label>
+                                  <textarea
+                                    placeholder="e.g. competitors launching new display cooler shelf tags."
+                                    rows={2}
+                                    value={trackingForm.notes}
+                                    onChange={(e) => setTrackingForm(prev => ({ ...prev, notes: e.target.value }))}
+                                    className="w-full border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
+                                  />
+                                </div>
+
+                                {/* Form Action Buttons */}
+                                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsAddTrackingOpen(false);
+                                    }}
+                                    className="py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-500 text-center cursor-pointer transition-colors bg-transparent"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!trackingForm.outletRtCode) {
+                                        addToast({ type: 'warning', message: 'Please select an outlet from the dropdown.' });
+                                        return;
+                                      }
+                                      
+                                      const matchedOutlet = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
+                                      if (!matchedOutlet) {
+                                        addToast({ type: 'error', message: 'Unable to match selected outlet.' });
+                                        return;
+                                      }
+
+                                      // Assemble Record
+                                      const newRecord: CompetitorRecord = {
+                                        id: `competitor-${Date.now()}`,
+                                        outletName: matchedOutlet.name,
+                                        rtCode: matchedOutlet.rtCode,
+                                        competitorBrand: trackingForm.competitorBrand,
+                                        skuName: trackingForm.skuName || `${trackingForm.competitorBrand} Audit Item`,
+                                        skuQty: trackingForm.skuQty,
+                                        skuPrice: trackingForm.skuPrice,
+                                        invoicePhoto: trackingForm.invoicePhoto,
+                                        notes: trackingForm.notes,
+                                        date: new Date().toISOString().split('T')[0]
+                                      };
+
+                                      setCompetitorRecords(prev => [newRecord, ...prev]);
+                                      addToast({ type: 'success', message: 'Competitor tracking log saved successfully!' });
+                                      setIsAddTrackingOpen(false);
+                                    }}
+                                    className="py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-center text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 border-none"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                    <span>{language === 'SI' ? 'සුරකින්න' : 'Save Record'}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
                           </div>
-                        );
-                      })}
+                        )}
+                      </AnimatePresence>
 
                     </div>
                   )}
 
-                  {/* TAB 4: PROFILE */}
-                  {activeTab === 'profile' && (
-                    <div>
-                      {/* Premium Top Wave Section */}
-                      <div className="bg-slate-50 px-6 pt-8 pb-6 border-b border-slate-200 flex flex-col items-center text-center">
-                        {/* White avatar circle with slate initials */}
-                        <div className="w-20 h-20 rounded-full bg-white shadow-md border-2 border-slate-300 flex items-center justify-center text-slate-800 text-xl font-sans font-extrabold tracking-wide mb-3 relative">
-                          {profile ? getInitials(profile.full_name || profile.se_code) : 'RA'}
-                          {/* Online status indicator dot */}
-                          <span className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
-                        </div>
 
-                        <h3 className="font-sans font-extrabold text-xl text-slate-900 leading-tight">{profile?.full_name || 'Rumesh Anjanawardana'}</h3>
-                        <span className="text-xs text-slate-500 font-semibold uppercase tracking-widest mt-1">{profile?.role || 'Senior Field Operations Rep'}</span>
-                        <div className="mt-2.5 bg-slate-900 text-slate-100 font-semibold px-3 py-1 rounded text-[9px] uppercase tracking-wider font-sans">
-                          Territory: {profile?.territory || 'WESTERN-04 (Colombo Base)'}
+
+                  {/* TAB 4: SETTINGS & TERMINAL CONFIG */}
+                  {activeTab === 'profile' && (
+                    <div className="pb-10 font-sans">
+                      
+                      {/* Premium Top Hero Banner Section */}
+                      <div className="bg-gradient-to-br from-indigo-650 to-sky-600 px-6 py-8 text-center border-b border-slate-200/50 flex flex-col items-center justify-center relative overflow-hidden shadow-sm">
+                        <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
+                        <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-white mb-3 shadow-md border border-white/20">
+                          <Settings className="w-7 h-7" />
                         </div>
+                        <h2 className="text-xl font-extrabold text-white tracking-tight">{curLang.settingsTitle}</h2>
+                        <p className="text-[11px] text-sky-100 font-semibold mt-1 uppercase tracking-wide px-4 leading-normal">{curLang.settingsSub}</p>
                       </div>
 
-                      {/* Hub stats breakdown Row */}
-                      <div className="px-5 py-4">
-                        <div className="grid grid-cols-3 gap-2 bg-white rounded-xl p-4 shadow-xs border border-slate-200 text-center divide-x divide-slate-100">
-                          <div>
-                            <span className="text-2xl font-sans font-extrabold text-slate-900 block">42</span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">Store Visits</span>
+                      <div className="px-5 py-4 space-y-5">
+
+                        {/* SECTION 1: GLOBAL PREFERENCES & LABELS */}
+                        <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 space-y-4">
+                          <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <SlidersHorizontal className="w-4 h-4 text-sky-500" />
+                            {language === 'SI' ? 'යෙදුම් මනාපයන්' : 'App Preferences'}
+                          </h4>
+
+                          {/* Theme Toggling */}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="text-left max-w-[65%]">
+                              <span className="text-xs font-bold text-slate-700 block">{curLang.themeLabel}</span>
+                              <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">{curLang.themeDesc}</span>
+                            </div>
+                            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0 select-none">
+                              <button 
+                                onClick={() => setTheme('light')}
+                                className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${theme === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400 hover:text-slate-600'}`}
+                              >
+                                <Sun className="w-3 h-3 text-amber-500" />
+                                {curLang.lightMode.split(' ')[0]}
+                              </button>
+                              <button 
+                                onClick={() => setTheme('dark')}
+                                className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${theme === 'dark' ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-400 hover:text-white'}`}
+                              >
+                                <Moon className="w-3 h-3 text-indigo-400" />
+                                {curLang.darkMode.split(' ')[0]}
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-2xl font-sans font-extrabold text-slate-900 block">12</span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">Complaints Logs</span>
-                          </div>
-                          <div>
-                            <span className="text-2xl font-sans font-extrabold text-slate-900 block">96%</span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">Fulfillment</span>
+
+                          <hr className="border-slate-100" />
+
+                          {/* Language Switcher */}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="text-left max-w-[65%]">
+                              <span className="text-xs font-bold text-slate-700 block">{curLang.langLabel}</span>
+                              <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">{curLang.langDesc}</span>
+                            </div>
+                            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0 select-none">
+                              <button 
+                                onClick={() => setLanguage('EN')}
+                                className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${language === 'EN' ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                              >
+                                EN
+                              </button>
+                              <button 
+                                onClick={() => setLanguage('SI')}
+                                className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${language === 'SI' ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-700'}`}
+                              >
+                                සිංහල
+                              </button>
+                            </div>
                           </div>
                         </div>
 
-                        {/* List Settings Card */}
-                        <div className="bg-white rounded-xl mt-5 shadow-xs border border-slate-200 overflow-hidden divide-y divide-slate-100">
-                          {[
-                            { label: 'Merchant Territory Configuration', icon: 'Map', desc: 'Western Province base mapping' },
-                            { label: 'Assigned Vehicles & Route Logbook', icon: 'Box', desc: 'LBCL Multi-Van #WP-3829' },
-                            { label: 'Sync System & Purge Memory Cache', icon: 'ClipboardCheck', desc: 'Clear 4.2 MB local state' },
-                          ].map((setting, idx) => (
-                            <div key={idx} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors cursor-pointer">
-                              <div className="flex items-center gap-3">
-                                <span className="p-2 bg-slate-50 rounded border border-slate-200 text-slate-550 text-slate-500">
-                                  {renderIcon(setting.icon, "w-4 h-4", "#64748B")}
-                                </span>
-                                <div className="text-left">
-                                  <span className="text-xs font-bold text-slate-700 block">{setting.label}</span>
-                                  <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">{setting.desc}</span>
-                                </div>
-                              </div>
-                              <ChevronRight className="w-4 h-4 text-slate-300" />
-                            </div>
-                          ))}
 
-                          {/* Red logout trigger option */}
-                          <div 
-                            onClick={() => {
-                              setIsRefreshing(true);
-                              setTimeout(() => {
-                                setIsRefreshing(false);
-                                localStorage.removeItem('lbcl_auth_user');
-                                localStorage.removeItem('lbcl_auth_profile');
-                                setSessionUser({ email: "operations@lbcl.com", id: "all-access-user" });
-                                setProfile({
-                                  full_name: "Field Operations Representative",
-                                  se_code: "ALL_ACCESS",
-                                  assigned_outlet_id: "",
-                                  role: "All Access Mode",
-                                  territory: "Colombo & Regional Bases"
-                                });
-                                setLoginSeCode('');
-                                setLoginPassword('');
-                                setActiveTab('home');
-                                setActiveSubPage(null);
-                                addToast({
-                                  type: 'success',
-                                  message: 'Session cleared. Returned to standard All-Access mode.'
-                                });
-                              }, 1000);
-                            }}
-                            className="p-4 flex justify-between items-center hover:bg-rose-50/50 transition-colors cursor-pointer text-rose-600"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="p-2 bg-rose-50 rounded border border-rose-100 text-rose-500">
-                                <LogOut className="w-4 h-4" />
-                              </span>
-                              <div className="text-left">
-                                <span className="text-xs font-bold block">Reset All-Access Session</span>
-                                <span className="text-[10px] text-rose-400 block mt-0.5">Clear custom tokens and reload standard view</span>
-                              </div>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-rose-300" />
-                          </div>
-                        </div>
+
                       </div>
 
                     </div>
@@ -2490,46 +2973,27 @@ export default function App() {
               </div>
             </button>
 
-            {/* Button 2: Apps Directory */}
+            {/* Button 2: Competitor Tracking */}
             <button 
               onClick={() => {
-                setActiveTab('apps');
+                setActiveTab('competitor');
                 setActiveSubPage(null);
               }}
               className="flex flex-col items-center cursor-pointer justify-center relative py-1"
             >
               <div className={`p-1 px-3 rounded transition-all flex flex-col items-center ${
-                activeTab === 'apps' || activeSubPage !== null
+                activeTab === 'competitor' && activeSubPage === null 
                   ? 'text-slate-900 font-extrabold' 
                   : 'text-slate-400'
               }`}>
-                <Box className="w-5 h-5" />
-                <span className="text-[9px] uppercase font-bold tracking-wider mt-1">Apps</span>
+                <TrendingUp className="w-5 h-5" />
+                <span className="text-[9px] uppercase font-bold tracking-wider mt-1">
+                  {language === 'SI' ? 'තරඟකරුවන්' : 'Competitor'}
+                </span>
               </div>
             </button>
 
-            {/* Button 3: Alerts Notifications */}
-            <button 
-              onClick={() => {
-                setActiveTab('alerts');
-                setActiveSubPage(null);
-              }}
-              className="flex flex-col items-center cursor-pointer justify-center relative py-1"
-            >
-              <div className={`p-1 px-3 rounded transition-all flex flex-col items-center relative ${
-                activeTab === 'alerts' && activeSubPage === null 
-                  ? 'text-slate-900 font-extrabold' 
-                  : 'text-slate-400'
-              }`}>
-                <Bell className="w-5 h-5" />
-                {unreadAlertsCount > 0 && (
-                  <span className="absolute top-1 right-2 bg-rose-500 w-2 h-2 rounded-full ring-2 ring-white"></span>
-                )}
-                <span className="text-[9px] uppercase font-bold tracking-wider mt-1">Alerts</span>
-              </div>
-            </button>
-
-            {/* Button 4: Profile rep */}
+            {/* Button 3: Settings tab */}
             <button 
               onClick={() => {
                 setActiveTab('profile');
@@ -2539,16 +3003,142 @@ export default function App() {
             >
               <div className={`p-1 px-3 rounded transition-all flex flex-col items-center ${
                 activeTab === 'profile' && activeSubPage === null 
-                  ? 'text-slate-900 font-extrabold' 
+                  ? 'text-sky-600 font-extrabold' 
                   : 'text-slate-400'
               }`}>
-                <User className="w-5 h-5" />
-                <span className="text-[9px] uppercase font-bold tracking-wider mt-1">Profile</span>
+                <Settings className="w-5 h-5 animate-hover-spin" />
+                <span className="text-[9px] uppercase font-bold tracking-wider mt-1">
+                  {language === 'SI' ? 'සැකසුම්' : 'Settings'}
+                </span>
               </div>
             </button>
 
           </div>
         </nav>
+
+        {/* CLEAR CACHE CONFIRMATION DIALOG MODAL */}
+        <AnimatePresence>
+          {isClearCacheConfirmOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.92, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl border text-center font-sans ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}
+              >
+                <div className="w-12 h-12 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 mx-auto mb-4">
+                  <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <h3 className="text-base font-extrabold">{curLang.confirmClearTitle}</h3>
+                <p className="text-xs text-slate-400 mt-2.5 leading-relaxed font-semibold">
+                  {curLang.confirmClearDesc}
+                </p>
+                <div className="grid grid-cols-2 gap-2 mt-6">
+                  <button
+                    onClick={() => setIsClearCacheConfirmOpen(false)}
+                    className="py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-550 transition-colors cursor-pointer"
+                  >
+                    {curLang.confirmNo}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsClearCacheConfirmOpen(false);
+                      addToast({ type: 'warning', message: 'Purging localized browser state logs...' });
+                      setTimeout(() => {
+                        localStorage.clear();
+                        window.location.reload();
+                      }, 1000);
+                    }}
+                    className="py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  >
+                    {curLang.confirmYes}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* TEST PRINT RECEIPT SLIP PREVIEW MODAL */}
+        <AnimatePresence>
+          {showSlipTestModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.92, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl border font-sans text-left ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}
+              >
+                <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-200">
+                  <span className="text-sm font-extrabold flex items-center gap-2">
+                    <Printer className="w-4 h-4 text-sky-500" />
+                    {curLang.slipPreviewTitle}
+                  </span>
+                  <button 
+                    onClick={() => setShowSlipTestModal(false)}
+                    className="p-1 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Styled Receipt Look */}
+                <div className="bg-amber-50/40 border border-dashed border-amber-200 rounded-xl p-5 font-mono text-xs text-slate-700 space-y-3 relative overflow-hidden">
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-200 to-yellow-300"></div>
+                  
+                  <div className="text-center font-bold uppercase tracking-wider text-slate-900 pb-2 border-b border-dashed border-amber-200">
+                    {curLang.slipMockText}
+                  </div>
+                  
+                  <div className="space-y-1 text-[11px] leading-relaxed">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Terminal:</span>
+                      <span className="font-bold text-slate-800">{connectedPrinter || 'BIXOLON_DEMO'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Operator:</span>
+                      <span className="font-bold text-slate-800">{profile?.full_name || 'Rumesh A.'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">SE Code:</span>
+                      <span className="font-bold text-slate-800">{profile?.se_code || 'ALL_ACCESS'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Status:</span>
+                      <span className="font-bold text-emerald-600 uppercase">ONLINE - TEST</span>
+                    </div>
+                  </div>
+
+                  <hr className="border-dashed border-amber-200" />
+
+                  <div className="space-y-1 text-[11px] leading-normal pt-1 bg-slate-100/50 p-2 rounded">
+                    <span className="text-[10px] text-slate-450 font-bold uppercase tracking-wider block">{curLang.slipFooter}</span>
+                    <p className="font-sans italic text-slate-600 font-medium">"{receiptFooter || 'No customization notes saved.'}"</p>
+                  </div>
+
+                  <hr className="border-dashed border-amber-200" />
+                  
+                  <div className="text-[10px] text-center text-slate-400">
+                    {curLang.slipPrintedAt} {new Date().toLocaleTimeString()}
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <button
+                    onClick={() => {
+                      setShowSlipTestModal(false);
+                      addToast({ type: 'success', message: 'Test strip successfully dispatched to mobile printer memory!' });
+                    }}
+                    className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    {language === 'SI' ? 'ප්‍රින්ට් කරන්න' : 'Confirm Print'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* TOAST PANEL OVERLAY */}
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[400px] pointer-events-none px-4 flex flex-col gap-2">
