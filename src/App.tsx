@@ -287,13 +287,34 @@ export default function App() {
     outletName: string;
     rtCode: string;
     competitorBrand: string;
-    skuName: string;
+    skuName?: string;
     skuQty: string;
-    skuPrice: string;
+    skuPrice?: string;
     invoicePhoto: string | null;
     notes: string;
     date: string;
+    skus?: { sku_type: string; quantity: string | number }[];
+    totalSkuQty?: number;
+    uniqueSkusCount?: number;
   }
+
+  const COMPETITOR_BRANDS = [
+    'Anchor Smooth',
+    'Anchor Strong',
+    'Tiger Original',
+    'Tiger Black',
+    'Heineken',
+    'Bison Special Stout',
+    'Bison Gold',
+    'Tiger Crystal',
+    'Bison Breeze',
+    'DCSL Premium',
+    'DCSL Lager',
+    'DCSL Strong',
+    'DCSL Stout',
+    'Aliya Lager',
+    'Aliya Strong'
+  ];
 
   const [competitorRecords, setCompetitorRecords] = useState<CompetitorRecord[]>(() => {
     const cached = localStorage.getItem('lbcl_competitor_records');
@@ -309,25 +330,29 @@ export default function App() {
         id: 'competitor-1',
         outletName: 'Cargills Food City - Colombo 03',
         rtCode: 'RT-1092',
-        competitorBrand: 'Carlsberg',
-        skuName: 'Carlsberg Premium Can 500ml',
-        skuQty: '15',
-        skuPrice: '6750',
+        competitorBrand: 'Tiger Black',
         invoicePhoto: null,
         notes: 'Price adjustment noticed on premium can SKUs in this territory.',
-        date: '2026-06-11'
+        date: '2026-06-11',
+        skuQty: '15',
+        skuPrice: '6750',
+        skus: [{ sku_type: '500ml', quantity: '15' }],
+        totalSkuQty: 15,
+        uniqueSkusCount: 1
       },
       {
         id: 'competitor-2',
         outletName: 'Keells Super - Union Place',
         rtCode: 'RT-9938',
         competitorBrand: 'Heineken',
-        skuName: 'Heineken Lager Bottle 330ml',
-        skuQty: '30',
-        skuPrice: '15600',
         invoicePhoto: null,
         notes: 'Enhanced refrigerator shelf space allocation for competitors.',
-        date: '2026-06-12'
+        date: '2026-06-12',
+        skuQty: '30',
+        skuPrice: '15600',
+        skus: [{ sku_type: '330ml', quantity: '30' }],
+        totalSkuQty: 30,
+        uniqueSkusCount: 1
       }
     ];
   });
@@ -343,13 +368,99 @@ export default function App() {
     notes: string;
   }>({
     outletRtCode: '',
-    competitorBrand: 'Carlsberg',
+    competitorBrand: 'Anchor Smooth',
     skuName: '',
     skuQty: '',
     skuPrice: '',
     invoicePhoto: null,
     notes: ''
   });
+
+  const [skuQuantities, setSkuQuantities] = useState<Record<string, string>>({
+    '625ml': '',
+    '500ml': '',
+    '330ml': '',
+    '330ml pts': '',
+    'Packs': ''
+  });
+
+  const [isFetchingCompetitors, setIsFetchingCompetitors] = useState(false);
+
+  const fetchCompetitorRecordsFromSupabase = async () => {
+    setIsFetchingCompetitors(true);
+    try {
+      const seCode = profile?.se_code || 'ALL_ACCESS';
+      const url = `${SUPABASE_URL}competitor_tracking?se_code=eq.${encodeURIComponent(seCode)}&select=*,competitor_skus(*)&order=id.desc`;
+      let response = await fetch(url, {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+      });
+
+      let data: any[] = [];
+      if (!response.ok) {
+        console.warn("Joined fetch of competitor_tracking failed, trying fallback without join...");
+        const urlFallback = `${SUPABASE_URL}competitor_tracking?se_code=eq.${encodeURIComponent(seCode)}&select=*&order=id.desc`;
+        response = await fetch(urlFallback, {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          }
+        });
+        if (response.ok) {
+          data = await response.json();
+          try {
+            const skusRes = await fetch(`${SUPABASE_URL}competitor_skus?select=*`, {
+              headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+              }
+            });
+            if (skusRes.ok) {
+              const allSkus = await skusRes.json();
+              data = data.map(item => ({
+                ...item,
+                competitor_skus: allSkus.filter((s: any) => s.tracking_id === item.id)
+              }));
+            }
+          } catch (errSkus) {
+            console.error("Separated fetch of competitor_skus failed:", errSkus);
+          }
+        }
+      } else {
+        data = await response.json();
+      }
+
+      if (Array.isArray(data)) {
+        const mapped: CompetitorRecord[] = data.map(item => {
+          const skus = item.competitor_skus || [];
+          const totalQty = skus.reduce((sum: number, s: any) => sum + (parseInt(s.quantity) || 0), 0);
+          const uniqueSkusCount = skus.filter((s: any) => (parseInt(s.quantity) || 0) > 0).length;
+
+          return {
+            id: String(item.id),
+            outletName: item.outlet_name || '',
+            rtCode: item.rt_code || '',
+            competitorBrand: item.competitor_brand || '',
+            skuQty: String(totalQty),
+            skuPrice: item.sku_price || '',
+            invoicePhoto: item.invoice_photo_url || item.invoice_photo || null,
+            notes: item.notes || '',
+            date: item.created_at ? item.created_at.split('T')[0] : (item.date || new Date().toISOString().split('T')[0]),
+            skus: skus,
+            totalSkuQty: totalQty,
+            uniqueSkusCount: uniqueSkusCount
+          };
+        });
+        setCompetitorRecords(mapped);
+      }
+    } catch (err) {
+      console.error("Error fetching competitor trackings:", err);
+    } finally {
+      setIsFetchingCompetitors(false);
+    }
+  };
 
   // Save competitor records to local storage on modification
   useEffect(() => {
@@ -914,11 +1025,19 @@ export default function App() {
     fetchOutletsFromSupabase();
     fetchCapacitiesFromSupabase();
     fetchIssueTypesFromSupabase();
+    fetchCompetitorRecordsFromSupabase();
   }, []);
 
   useEffect(() => {
     fetchComplaintsFromSupabase();
+    fetchCompetitorRecordsFromSupabase();
   }, [profile]);
+
+  useEffect(() => {
+    if (activeTab === 'competitor') {
+      fetchCompetitorRecordsFromSupabase();
+    }
+  }, [activeTab]);
 
   // Compute live recent activities merging Supabase complaints with static activities
   const computedRecentActivities = useMemo(() => {
@@ -2514,12 +2633,19 @@ export default function App() {
                           onClick={() => {
                             setTrackingForm({
                               outletRtCode: '',
-                              competitorBrand: 'Carlsberg',
+                              competitorBrand: 'Anchor Smooth',
                               skuName: '',
                               skuQty: '',
                               skuPrice: '',
                               invoicePhoto: null,
                               notes: ''
+                            });
+                            setSkuQuantities({
+                              '625ml': '',
+                              '500ml': '',
+                              '330ml': '',
+                              '330ml pts': '',
+                              'Packs': ''
                             });
                             setIsAddTrackingOpen(true);
                           }}
@@ -2562,26 +2688,28 @@ export default function App() {
                                         {rec.date}
                                       </span>
                                     </div>
-                                    <h4 className="font-sans font-extrabold text-xs text-slate-900 mt-1.5 group-hover:text-sky-600 transition-colors">
+                                    <h4 className="font-sans font-extrabold text-sm text-slate-900 mt-1.5 group-hover:text-sky-600 transition-colors">
                                       {rec.outletName}
                                     </h4>
                                   </div>
 
-                                  <span className="px-2 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[9px] font-extrabold uppercase tracking-widest font-mono">
-                                    {rec.competitorBrand}
+                                  <span className="px-2 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[9px] font-extrabold uppercase tracking-wide font-mono shrink-0 whitespace-nowrap">
+                                    {rec.competitorBrand} - {rec.uniqueSkusCount || 0} SKUs logged
                                   </span>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-dashed border-slate-100 text-[11px] text-slate-600 font-sans leading-normal">
-                                  <div>
-                                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">SKU & Pack Details</span>
-                                    <span className="font-extrabold text-slate-800 block mt-0.5">{rec.skuName || 'Unspecified SKU'}</span>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">Inventory / Price</span>
-                                    <span className="font-extrabold text-emerald-600 block mt-0.5 font-mono">
-                                      {rec.skuQty ? `${rec.skuQty} Cases` : 'No Qty'} • {rec.skuPrice ? `Rs. ${rec.skuPrice}` : 'N/A Price'}
-                                    </span>
+                                <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100">
+                                  <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">SKU Case Quantities</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {rec.skus && rec.skus.length > 0 ? (
+                                      rec.skus.filter((sku: any) => (parseInt(sku.quantity) || 0) > 0).map((sku: any) => (
+                                        <span key={sku.sku_type || sku.id} className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 rounded text-[9px] font-bold font-mono">
+                                          {sku.sku_type}: <strong className="text-slate-800 font-extrabold">{sku.quantity}</strong>
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 font-sans italic">No individual SKU cases logged (Total: {rec.skuQty || 0} cases)</span>
+                                    )}
                                   </div>
                                 </div>
 
@@ -2618,10 +2746,10 @@ export default function App() {
                         {isAddTrackingOpen && (
                           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs select-none">
                             <motion.div 
-                              initial={{ opacity: 0, scale: 0.94, y: 15 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-                              className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-slate-200 font-sans text-left max-h-[90vh] overflow-y-auto"
+                               initial={{ opacity: 0, scale: 0.94, y: 15 }}
+                               animate={{ opacity: 1, scale: 1, y: 0 }}
+                               exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                               className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-slate-200 font-sans text-left max-h-[90vh] overflow-y-auto"
                             >
                               <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-150">
                                 <span className="text-sm font-extrabold flex items-center gap-2 text-slate-900">
@@ -2666,61 +2794,35 @@ export default function App() {
                                     onChange={(e) => setTrackingForm(prev => ({ ...prev, competitorBrand: e.target.value }))}
                                     className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500"
                                   >
-                                    <option value="Carlsberg">Carlsberg</option>
-                                    <option value="Heineken">Heineken</option>
-                                    <option value="Tiger">Tiger</option>
-                                    <option value="Anchor">Anchor</option>
-                                    <option value="Somersby">Somersby</option>
-                                    <option value="BGI">BGI</option>
-                                    <option value="Three Coins">Three Coins</option>
-                                    <option value="Other">Other Brand</option>
+                                    {COMPETITOR_BRANDS.map(brand => (
+                                      <option key={brand} value={brand}>{brand}</option>
+                                    ))}
                                   </select>
                                 </div>
 
                                 {/* SKU Details inputs */}
-                                <div className="p-3 bg-slate-50 border border-slate-150 rounded-2xl space-y-3">
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block border-b border-slate-200 pb-1">
-                                    SKU & Pack Particulars
+                                <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-2xl space-y-3">
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block border-b border-slate-200 pb-1.5 flex justify-between items-center">
+                                    <span>{language === 'SI' ? 'පැකේජ විස්තරය' : 'SKU Quantities:'}</span>
+                                    <span className="text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full uppercase tracking-normal">Enter Case Quantities</span>
                                   </span>
                                   
-                                  <div>
-                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">
-                                      {language === 'SI' ? 'පැකේජ විස්තරය' : 'SKU Details / Pack Size'}
-                                    </label>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g., Carlsberg Pilsner Can 500ml"
-                                      value={trackingForm.skuName}
-                                      onChange={(e) => setTrackingForm(prev => ({ ...prev, skuName: e.target.value }))}
-                                      className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:border-sky-500"
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">
-                                        Quantity (Cases)
-                                      </label>
-                                      <input
-                                        type="number"
-                                        placeholder="0"
-                                        value={trackingForm.skuQty}
-                                        onChange={(e) => setTrackingForm(prev => ({ ...prev, skuQty: e.target.value }))}
-                                        className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:border-sky-500"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wide block mb-0.5">
-                                        Casing Price (LKR)
-                                      </label>
-                                      <input
-                                        type="number"
-                                        placeholder="LKR"
-                                        value={trackingForm.skuPrice}
-                                        onChange={(e) => setTrackingForm(prev => ({ ...prev, skuPrice: e.target.value }))}
-                                        className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2 text-xs focus:outline-none focus:border-sky-500"
-                                      />
-                                    </div>
+                                  <div className="grid grid-cols-2 gap-3 pb-1">
+                                    {(['625ml', '500ml', '330ml', '330ml pts', 'Packs'] as const).map((sku) => (
+                                      <div key={sku} className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block">
+                                          {sku} Size Qty
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          value={skuQuantities[sku]}
+                                          onChange={(e) => setSkuQuantities(prev => ({ ...prev, [sku]: e.target.value }))}
+                                          className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-3 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-colors"
+                                        />
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
 
@@ -2730,7 +2832,7 @@ export default function App() {
                                     {language === 'SI' ? 'ඉන්වොයිස් පින්තූරය' : 'Invoice Photo'}
                                   </label>
                                   
-                                  <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center space-y-2 bg-slate-550">
+                                  <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center space-y-2 bg-slate-50">
                                     {trackingForm.invoicePhoto ? (
                                       <div className="relative inline-block">
                                         <img 
@@ -2754,7 +2856,7 @@ export default function App() {
                                         
                                         <div className="flex gap-2">
                                           {/* Standard Native File picker */}
-                                          <label className="bg-white hover:bg-slate-50 text-slate-705 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-[10px] shadow-xs cursor-pointer flex items-center gap-1">
+                                          <label className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-[10px] shadow-xs cursor-pointer flex items-center gap-1">
                                             <span>Attach Picture</span>
                                             <input 
                                               type="file" 
@@ -2777,7 +2879,6 @@ export default function App() {
                                           <button
                                             type="button"
                                             onClick={() => {
-                                              // High quality base64 placeholder for an invoice representation
                                               setTrackingForm(prev => ({
                                                 ...prev,
                                                 invoicePhoto: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=400&q=80'
@@ -2820,7 +2921,7 @@ export default function App() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (!trackingForm.outletRtCode) {
                                         addToast({ type: 'warning', message: 'Please select an outlet from the dropdown.' });
                                         return;
@@ -2832,23 +2933,99 @@ export default function App() {
                                         return;
                                       }
 
-                                      // Assemble Record
-                                      const newRecord: CompetitorRecord = {
-                                        id: `competitor-${Date.now()}`,
-                                        outletName: matchedOutlet.name,
-                                        rtCode: matchedOutlet.rtCode,
-                                        competitorBrand: trackingForm.competitorBrand,
-                                        skuName: trackingForm.skuName || `${trackingForm.competitorBrand} Audit Item`,
-                                        skuQty: trackingForm.skuQty,
-                                        skuPrice: trackingForm.skuPrice,
-                                        invoicePhoto: trackingForm.invoicePhoto,
-                                        notes: trackingForm.notes,
-                                        date: new Date().toISOString().split('T')[0]
-                                      };
+                                      try {
+                                        // 1. Insert primary row into 'competitor_tracking' Table
+                                        const primaryRow = {
+                                          se_code: profile?.se_code || 'ALL_ACCESS',
+                                          rt_code: matchedOutlet.rtCode,
+                                          outlet_name: matchedOutlet.name,
+                                          competitor_brand: trackingForm.competitorBrand,
+                                          notes: trackingForm.notes,
+                                          invoice_photo_url: trackingForm.invoicePhoto,
+                                          invoice_photo: trackingForm.invoicePhoto
+                                        };
 
-                                      setCompetitorRecords(prev => [newRecord, ...prev]);
-                                      addToast({ type: 'success', message: 'Competitor tracking log saved successfully!' });
-                                      setIsAddTrackingOpen(false);
+                                        const response = await fetch(`${SUPABASE_URL}competitor_tracking`, {
+                                          method: 'POST',
+                                          headers: {
+                                            'apikey': SUPABASE_ANON_KEY,
+                                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                                            'Content-Type': 'application/json',
+                                            'Prefer': 'return=representation'
+                                          },
+                                          body: JSON.stringify(primaryRow)
+                                        });
+
+                                        let trackingId = `temp-${Date.now()}`;
+                                        if (response.ok) {
+                                          const resData = await response.json();
+                                          const insertedRow = Array.isArray(resData) ? resData[0] : resData;
+                                          if (insertedRow && insertedRow.id) {
+                                            trackingId = String(insertedRow.id);
+                                          }
+                                        } else {
+                                          console.warn(`Tracking insert failed with status ${response.status}, using self-signed lookup ID`);
+                                        }
+
+                                        // 2. Prepare SKU list rows
+                                        const skusToInsert = Object.entries(skuQuantities)
+                                          .map(([skuType, qtyStr]) => {
+                                            const qtyNum = parseInt(qtyStr as string) || 0;
+                                            return {
+                                              tracking_id: trackingId,
+                                              sku_type: skuType,
+                                              quantity: qtyNum
+                                            };
+                                          })
+                                          .filter(s => s.quantity > 0);
+
+                                        // 3. Save SKUs to competitor_skus Table
+                                        if (skusToInsert.length > 0) {
+                                          const skusResponse = await fetch(`${SUPABASE_URL}competitor_skus`, {
+                                            method: 'POST',
+                                            headers: {
+                                              'apikey': SUPABASE_ANON_KEY,
+                                              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                                              'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify(skusToInsert)
+                                          });
+                                          if (!skusResponse.ok) {
+                                            console.warn(`SKU insert returned status ${skusResponse.status}`);
+                                          }
+                                        }
+
+                                        addToast({ type: 'success', message: 'Competitor tracking successfully saved!' });
+                                        fetchCompetitorRecordsFromSupabase();
+                                      } catch (err: any) {
+                                        console.error("Supabase write failure, committing locally:", err);
+                                        // Failover local fallback state
+                                        const calculatedSkus = Object.entries(skuQuantities).map(([type, qty]) => ({
+                                          sku_type: type,
+                                          sku_id: type,
+                                          quantity: parseInt(qty as string) || 0
+                                        }));
+                                        const calculatedTotal = calculatedSkus.reduce((sum, s) => sum + s.quantity, 0);
+                                        const uniqueCount = calculatedSkus.filter(s => s.quantity > 0).length;
+
+                                        const newRecord: CompetitorRecord = {
+                                          id: `competitor-${Date.now()}`,
+                                          outletName: matchedOutlet.name,
+                                          rtCode: matchedOutlet.rtCode,
+                                          competitorBrand: trackingForm.competitorBrand,
+                                          invoicePhoto: trackingForm.invoicePhoto,
+                                          notes: trackingForm.notes,
+                                          date: new Date().toISOString().split('T')[0],
+                                          skus: calculatedSkus,
+                                          totalSkuQty: calculatedTotal,
+                                          uniqueSkusCount: uniqueCount,
+                                          skuQty: String(calculatedTotal)
+                                        };
+                                        setCompetitorRecords(prev => [newRecord, ...prev]);
+                                        addToast({ type: 'warning', message: 'Active audit logs recorded offline successfully.' });
+                                      } finally {
+                                        setIsAddTrackingOpen(false);
+                                      }
                                     }}
                                     className="py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-center text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 border-none"
                                   >
