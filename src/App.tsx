@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+// @ts-ignore
+import loginWallArtBg from './assets/images/login_wall_art_1781191937515.jpg';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ClipboardCheck, AlertTriangle, Store, TrendingUp, Box, Map, Users,
@@ -1064,7 +1066,7 @@ export default function App() {
     return (
       <div 
         className="min-h-screen w-full flex items-center justify-center bg-cover bg-center bg-no-repeat p-4 font-sans select-none relative"
-        style={{ backgroundImage: "linear-gradient(rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.5)), url('/src/assets/images/login_wall_art_1781191937515.jpg')" }}
+        style={{ backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.5), rgba(15, 23, 42, 0.5)), url('${loginWallArtBg}')` }}
       >
         <div className="absolute inset-0 backdrop-blur-md"></div>
         

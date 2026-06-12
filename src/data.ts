@@ -48,12 +48,15 @@ export interface Outlet {
   seCode?: string;
 }
 
+// @ts-ignore
+import cooldeskBg from './assets/images/water_shade_glass_1781191625143.jpg';
+
 export const APP_LIST: AppConfig[] = [
   {
     id: 'cooldesk',
     name: 'CoolDesk',
     description: 'Cooler Complaint Management',
-    backgroundImage: '/src/assets/images/water_shade_glass_1781191625143.jpg',
+    backgroundImage: cooldeskBg,
     icon: 'ThermometerSnowflake',
     accent: '#0EA5E9',
     topBorder: '#0EA5E9',
