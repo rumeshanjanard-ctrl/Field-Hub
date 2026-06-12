@@ -27,6 +27,117 @@ import {
 const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || 'https://kbgtkoymrmpyltxoqdcz.supabase.co/rest/v1/';
 const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZ3Rrb3ltcm1weWx0eG9xZGN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2Njg5NDAsImV4cCI6MjA5NjI0NDk0MH0.7vck5MEQUf8oC8SE8VRTa-VzWYzBSczNXEYFBwEWsEM';
 
+// Resolve standard or external email formats to the corresponding active 'se_code'
+const resolveSeCodeFromEmail = (email: string, outlets?: Outlet[]): string => {
+  const norm = email.toLowerCase().trim();
+  
+  // 1. If we have fetched outlets, try finding a record matching this email in the seCode column
+  if (outlets && outlets.length > 0) {
+    const matchedOutlet = outlets.find(o => {
+      const oSe = (o.seCode || '').toLowerCase().trim();
+      return oSe === norm;
+    });
+    if (matchedOutlet && matchedOutlet.seCode) {
+      return matchedOutlet.seCode;
+    }
+
+    // 2. Try matching the email's prefix (username) as se_code in outlets
+    const prefix = norm.split('@')[0];
+    const prefixMatch = outlets.find(o => {
+      const oSe = (o.seCode || '').toLowerCase().trim();
+      return oSe === prefix;
+    });
+    if (prefixMatch && prefixMatch.seCode) {
+      return prefixMatch.seCode;
+    }
+
+    // 3. Try fuzzy or specific name matches inside fetched outlets
+    let matchedName: string | null = null;
+    if (norm.includes('dilshan')) matchedName = 'dilshan';
+    else if (norm.includes('rumesh')) matchedName = 'rumesh';
+    else if (norm.includes('nisansala')) matchedName = 'nisansala';
+    else if (norm.includes('asanka')) matchedName = 'asanka';
+
+    if (matchedName) {
+      const nameMatch = outlets.find(o => {
+        const oSe = (o.seCode || '').toLowerCase().trim();
+        return oSe === matchedName;
+      });
+      if (nameMatch && nameMatch.seCode) {
+        return nameMatch.seCode;
+      }
+    }
+  }
+
+  // 4. Static fallbacks if outlets array is empty or not yet loaded
+  if (norm.endsWith('@lbcl.com')) {
+    // strip standard domain to get active se_code in uppercase
+    return norm.replace('@lbcl.com', '').toUpperCase();
+  }
+  
+  // Custom mapping for external emails
+  if (norm === 'rrdilshan576@gmail.com') return 'DILSHAN';
+  if (norm === 'rumeshanjanard@gmail.com') return 'RUMESH';
+  
+  // Fuzzy matching if email contains standard rep names
+  if (norm.includes('dilshan')) return 'DILSHAN';
+  if (norm.includes('rumesh')) return 'RUMESH';
+  if (norm.includes('nisansala')) return 'NISANSALA';
+  if (norm.includes('asanka')) return 'ASANKA';
+  
+  const prefix = norm.split('@')[0];
+  return prefix.toUpperCase();
+};
+
+// Helper to match logged in representative's code to outlet details
+const isMatchingSeCode = (userSeCode: string, outletSeCode: string, outletRtCode: string): boolean => {
+  const u = userSeCode.toLowerCase().trim().replace(/['"“”]/g, '');
+  const oSe = outletSeCode.toLowerCase().trim().replace(/['"“”]/g, '');
+  const oRt = outletRtCode.toLowerCase().trim().replace(/['"“”]/g, '');
+
+  if (!u) return false;
+
+  // 1. Exact match
+  if (u === oSe || u === oRt) return true;
+
+  // 2. Strip email domains
+  const uPrefix = u.split('@')[0];
+  const oSePrefix = oSe.split('@')[0];
+  if (uPrefix === oSePrefix) return true;
+
+  // 3. Digits match (e.g. "se-1092" contains "1092", matching "RT-1092" or "1092")
+  const uDigits = u.replace(/\D/g, '');
+  const oRtDigits = oRt.replace(/\D/g, '');
+  const oSeDigits = oSe.replace(/\D/g, '');
+
+  if (uDigits && oRtDigits && uDigits === oRtDigits) return true;
+  if (uDigits && oSeDigits && uDigits === oSeDigits) return true;
+
+  // 4. Equivalence groups
+  const equivs = [
+    ['rumesh', 'se-1092', 'se1092', 'rumeshanjanard', 'rt-1092', '1092'],
+    ['dilshan', 'se-4482', 'se4482', 'rrdilshan576', 'rt-4482', '4482'],
+    ['nisansala', 'se-9938', 'se9938', 'rt-9938', '9938'],
+    ['asanka', 'se-2231', 'se2231', 'rt-2231', '2231']
+  ];
+
+  for (const group of equivs) {
+    const hasU = group.some(item => u.includes(item) || item.includes(uPrefix));
+    const hasOSe = group.some(item => oSe.includes(item) || item.includes(oSePrefix));
+    const hasORt = group.some(item => oRt.includes(item));
+    if (hasU && (hasOSe || hasORt)) {
+      return true;
+    }
+  }
+
+  // 5. Substring matches for other representatives
+  if (uPrefix.length > 2 && oSePrefix.length > 2) {
+    if (uPrefix.includes(oSePrefix) || oSePrefix.includes(uPrefix)) return true;
+  }
+
+  return false;
+};
+
 export default function App() {
   // Page routing and tab states
   // tab: 'home' | 'apps' | 'alerts' | 'profile'
@@ -37,11 +148,17 @@ export default function App() {
   // --- SUPABASE SESSION AUTHENTICATION STATE ---
   const [sessionUser, setSessionUser] = useState<any>(() => {
     const cached = localStorage.getItem('lbcl_auth_user');
-    return cached ? JSON.parse(cached) : null;
+    return cached ? JSON.parse(cached) : { email: "operations@lbcl.com", id: "all-access-user" };
   });
   const [profile, setProfile] = useState<any>(() => {
     const cached = localStorage.getItem('lbcl_auth_profile');
-    return cached ? JSON.parse(cached) : null;
+    return cached ? JSON.parse(cached) : {
+      full_name: "Field Operations Representative",
+      se_code: "ALL_ACCESS",
+      assigned_outlet_id: "",
+      role: "All Access Mode",
+      territory: "Colombo & Regional Bases"
+    };
   });
 
   const [loginSeCode, setLoginSeCode] = useState('');
@@ -59,6 +176,10 @@ export default function App() {
         .slice(0, 2)
         .join('')
         .toUpperCase();
+    }
+    if (cleanName.includes('@')) {
+      const parts = cleanName.split('@')[0];
+      return parts.slice(0, 2).toUpperCase();
     }
     return cleanName.slice(0, 2).toUpperCase();
   };
@@ -135,12 +256,44 @@ export default function App() {
 
       if (sessionData && sessionData.user) {
         const emailUser = sessionData.user.email || '';
-        const usernamePrefix = emailUser.split('@')[0].toLowerCase().trim();
+        
+        // Fetch up-to-date outlets list to ensure we resolve se_code correctly from real Supabase data
+        let currentOutlets = outletsList;
+        try {
+          const freshRes = await fetch(`${SUPABASE_URL}outlets?select=*&order=outlet_name.asc`, {
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            }
+          });
+          if (freshRes.ok) {
+            const data = await freshRes.json();
+            if (Array.isArray(data) && data.length > 0) {
+              currentOutlets = data.map((o: any) => ({
+                rtCode: o.rt_code || '',
+                name: o.outlet_name || '',
+                address: o.address ? o.address.trim() : 'Colombo Base, Sri Lanka',
+                seCode: o.se_code || ''
+              }));
+              setOutletsList(currentOutlets);
+            }
+          }
+        } catch (freshErr) {
+          console.error("Error updating outlets list during authentication:", freshErr);
+        }
+
+        let resolvedSeCode = resolveSeCodeFromEmail(emailUser, currentOutlets);
+        let lowerSeCode = resolvedSeCode.toLowerCase();
         let matchedOutlet: any = null;
 
-        // Immediately fetch data from 'outlets' table where 'se_code' matches usernamePrefix
+        // Immediately fetch data from 'outlets' table where 'se_code' matches lowerSeCode or the full email
         try {
-          const outletRes = await fetch(`${SUPABASE_URL}outlets?se_code=eq.${usernamePrefix}&select=*`, {
+          let url = `${SUPABASE_URL}outlets?se_code=eq.${lowerSeCode}&select=*`;
+          if (!emailUser.toLowerCase().endsWith('@lbcl.com') && emailUser.toLowerCase().trim() !== lowerSeCode) {
+            url = `${SUPABASE_URL}outlets?or=(se_code.eq.${lowerSeCode},se_code.eq.${emailUser.toLowerCase().trim()})&select=*`;
+          }
+
+          const outletRes = await fetch(url, {
             method: 'GET',
             headers: {
               'apikey': SUPABASE_ANON_KEY,
@@ -151,10 +304,29 @@ export default function App() {
             const outletsData = await outletRes.json();
             if (Array.isArray(outletsData) && outletsData.length > 0) {
               matchedOutlet = outletsData[0];
+              if (matchedOutlet.se_code) {
+                resolvedSeCode = matchedOutlet.se_code;
+                lowerSeCode = resolvedSeCode.toLowerCase();
+              }
             }
           }
         } catch (outletErr) {
           console.error("Error fetching matching outlet from Supabase on login:", outletErr);
+        }
+
+        // Local fallback lookup in newly loaded outlets array using the robust matcher
+        if (!matchedOutlet && currentOutlets.length > 0) {
+          const localMatch = currentOutlets.find(o => 
+            isMatchingSeCode(lowerSeCode, o.seCode || '', o.rtCode || '')
+          );
+          if (localMatch) {
+            matchedOutlet = {
+              rt_code: localMatch.rtCode,
+              outlet_name: localMatch.name,
+              address: localMatch.address,
+              se_code: localMatch.seCode
+            };
+          }
         }
 
         const userId = sessionData.user.id;
@@ -185,22 +357,22 @@ export default function App() {
               },
               body: JSON.stringify({
                 id: userId,
-                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : (usernamePrefix.toUpperCase()),
+                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : resolvedSeCode,
                 assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
                 role: "Field Operations Representative",
                 territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
-                se_code: usernamePrefix
+                se_code: resolvedSeCode
               })
             });
 
             if (upsertRes.ok) {
               profileData = {
                 id: userId,
-                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : (usernamePrefix.toUpperCase()),
+                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : resolvedSeCode,
                 assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
                 role: "Field Operations Representative",
                 territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
-                se_code: usernamePrefix
+                se_code: resolvedSeCode
               };
             }
           }
@@ -212,14 +384,14 @@ export default function App() {
         if (!profileData) {
           profileData = {
             id: userId,
-            full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : (usernamePrefix.toUpperCase()),
+            full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : resolvedSeCode,
             assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
             role: "Field Operations Representative",
             territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
-            se_code: usernamePrefix
+            se_code: resolvedSeCode
           };
         } else {
-          profileData.se_code = usernamePrefix;
+          profileData.se_code = resolvedSeCode;
           if (matchedOutlet) {
             profileData.assigned_outlet_id = matchedOutlet.rt_code;
           }
@@ -232,7 +404,7 @@ export default function App() {
 
         addToast({
           type: 'success',
-          message: `Access granted! Welcome, ${profileData.full_name || usernamePrefix.toUpperCase()}.`
+          message: `Access granted! Welcome, ${profileData.full_name || resolvedSeCode}.`
         });
       }
     } catch (err: any) {
@@ -249,11 +421,22 @@ export default function App() {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
+      const hours = now.getHours();
+      let phrase = 'Good Day';
+      if (hours >= 5 && hours < 12) {
+        phrase = 'Good Morning';
+      } else if (hours >= 12 && hours < 17) {
+        phrase = 'Good Afternoon';
+      } else if (hours >= 17 || hours < 5) {
+        phrase = 'Good Evening';
+      }
       
       const displayName = profile 
-        ? (profile.se_code ? profile.se_code.toUpperCase() : profile.full_name) 
+        ? (profile.se_code 
+            ? (profile.se_code.includes('@') ? profile.se_code.split('@')[0].toUpperCase() : profile.se_code.toUpperCase()) 
+            : profile.full_name) 
         : 'Guest';
-      const greetText = `Good Day, ${displayName}`;
+      const greetText = `${phrase}, ${displayName}`;
       setGreeting(greetText);
 
       // Format date
@@ -392,28 +575,7 @@ export default function App() {
   const fetchComplaintsFromSupabase = async () => {
     setIsLoadingComplaints(true);
     try {
-      let url = `${SUPABASE_URL}complaints?select=*&order=created_at.desc`;
-      if (profile) {
-        const userSeCode = (profile.se_code || '').toLowerCase().trim();
-        if (userSeCode) {
-          const matchedRtCodes = outletsList
-            .filter(o => (o.seCode || '').toLowerCase().trim() === userSeCode)
-            .map(o => o.rtCode);
-          if (matchedRtCodes.length > 0) {
-            url = `${SUPABASE_URL}complaints?rt_code=in.(${matchedRtCodes.join(',')})&select=*&order=created_at.desc`;
-          } else {
-            const assignedId = profile.assigned_outlet_id;
-            if (assignedId) {
-              url = `${SUPABASE_URL}complaints?rt_code=eq.${assignedId}&select=*&order=created_at.desc`;
-            }
-          }
-        } else {
-          const assignedId = profile.assigned_outlet_id;
-          if (assignedId) {
-            url = `${SUPABASE_URL}complaints?rt_code=eq.${assignedId}&select=*&order=created_at.desc`;
-          }
-        }
-      }
+      const url = `${SUPABASE_URL}complaints?select=*&order=created_at.desc`;
       const response = await fetch(url, {
         headers: {
           'apikey': SUPABASE_ANON_KEY,
@@ -821,15 +983,8 @@ export default function App() {
 
   // Dynamic filter to compute and fetch ONLY the user's assigned own outlets (from Supabase 'outlets' table using se_code or rt_code matching)
   const filteredOutletsForDashboard = useMemo(() => {
-    if (!profile) return [];
-    const userSeCode = (profile.se_code || '').toLowerCase().trim();
-    if (!userSeCode) return [];
-
-    return outletsList.filter(o => {
-      const oSeCode = (o.seCode || '').toLowerCase().trim();
-      return oSeCode === userSeCode;
-    });
-  }, [outletsList, profile]);
+    return outletsList;
+  }, [outletsList]);
 
   // Auto-prepopulate CoolDesk complaint form if only one isolated outlet is returned
   useEffect(() => {
@@ -863,12 +1018,15 @@ export default function App() {
   // Filter outlets list for dropdown in CoolDesk
   const filteredOutletsForCoolDesk = useMemo(() => {
     let list = filteredOutletsForDashboard;
-    if (!cooldeskSearchQuery) return list;
+    // If the input query is empty or matches the currently selected outlet name exactly, show all available outlets for selection
+    if (!cooldeskSearchQuery || cooldeskSearchQuery.trim() === cooldeskForm.outletName) {
+      return list;
+    }
     return list.filter(o => 
       o.name.toLowerCase().includes(cooldeskSearchQuery.toLowerCase()) ||
       o.rtCode.toLowerCase().includes(cooldeskSearchQuery.toLowerCase())
     );
-  }, [cooldeskSearchQuery, filteredOutletsForDashboard]);
+  }, [cooldeskSearchQuery, filteredOutletsForDashboard, cooldeskForm.outletName]);
 
   // Filter apps list based on categories and search query
   const filteredApps = useMemo(() => {
@@ -902,7 +1060,7 @@ export default function App() {
     }
   };
 
-  if (!sessionUser || !profile) {
+  if (false && (!sessionUser || !profile)) {
     return (
       <div 
         className="min-h-screen w-full flex items-center justify-center bg-cover bg-center bg-no-repeat p-4 font-sans select-none relative"
@@ -1031,7 +1189,7 @@ export default function App() {
                       <div className="inline-flex items-center gap-2.5">
                         <h1 className="text-2xl font-sans font-extrabold text-slate-900 tracking-tight">{greeting}</h1>
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center font-sans font-extrabold text-xs shadow-sm border border-white shrink-0 select-none">
-                          {profile ? getInitials(profile.se_code || profile.full_name) : 'RA'}
+                          {profile ? getInitials(profile.full_name || profile.se_code) : 'RA'}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
@@ -1170,26 +1328,32 @@ export default function App() {
 
                               {/* Search results overlay dropdown */}
                               {isCoolDeskDropdownOpen && (
-                                <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-50">
-                                  {filteredOutletsForCoolDesk.length > 0 ? (
-                                    filteredOutletsForCoolDesk.map((outlet) => (
-                                      <button
-                                        key={outlet.rtCode}
-                                        type="button"
-                                        onClick={() => handleSelectOutlet(outlet)}
-                                        className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
-                                      >
-                                        <span className="text-sm font-bold text-slate-700">{outlet.name}</span>
-                                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                                          <span className="font-mono bg-slate-100 text-slate-500 px-1 py-0.2 rounded text-[10px]">{outlet.rtCode}</span>
-                                          <span className="truncate">{outlet.address}</span>
-                                        </div>
-                                      </button>
-                                    ))
-                                  ) : (
-                                    <div className="p-4 text-center text-xs text-slate-400">No matching LBCL outlets found</div>
-                                  )}
-                                </div>
+                                <>
+                                  <div 
+                                    className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                                    onClick={() => setIsCoolDeskDropdownOpen(false)}
+                                  />
+                                  <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-50">
+                                    {filteredOutletsForCoolDesk.length > 0 ? (
+                                      filteredOutletsForCoolDesk.map((outlet) => (
+                                        <button
+                                          key={outlet.rtCode}
+                                          type="button"
+                                          onClick={() => handleSelectOutlet(outlet)}
+                                          className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex flex-col gap-0.5 relative z-50"
+                                        >
+                                          <span className="text-sm font-bold text-slate-700">{outlet.name}</span>
+                                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                                            <span className="font-mono bg-slate-100 text-slate-500 px-1 py-0.2 rounded text-[10px]">{outlet.rtCode}</span>
+                                            <span className="truncate">{outlet.address}</span>
+                                          </div>
+                                        </button>
+                                      ))
+                                    ) : (
+                                      <div className="p-4 text-center text-xs text-slate-400 relative z-50">No matching LBCL outlets found</div>
+                                    )}
+                                  </div>
+                                </>
                               )}
                             </div>
 
@@ -2202,7 +2366,7 @@ export default function App() {
                       <div className="bg-slate-50 px-6 pt-8 pb-6 border-b border-slate-200 flex flex-col items-center text-center">
                         {/* White avatar circle with slate initials */}
                         <div className="w-20 h-20 rounded-full bg-white shadow-md border-2 border-slate-300 flex items-center justify-center text-slate-800 text-xl font-sans font-extrabold tracking-wide mb-3 relative">
-                          {profile ? getInitials(profile.se_code || profile.full_name) : 'RA'}
+                          {profile ? getInitials(profile.full_name || profile.se_code) : 'RA'}
                           {/* Online status indicator dot */}
                           <span className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
                         </div>
@@ -2260,15 +2424,21 @@ export default function App() {
                                 setIsRefreshing(false);
                                 localStorage.removeItem('lbcl_auth_user');
                                 localStorage.removeItem('lbcl_auth_profile');
-                                setSessionUser(null);
-                                setProfile(null);
+                                setSessionUser({ email: "operations@lbcl.com", id: "all-access-user" });
+                                setProfile({
+                                  full_name: "Field Operations Representative",
+                                  se_code: "ALL_ACCESS",
+                                  assigned_outlet_id: "",
+                                  role: "All Access Mode",
+                                  territory: "Colombo & Regional Bases"
+                                });
                                 setLoginSeCode('');
                                 setLoginPassword('');
                                 setActiveTab('home');
                                 setActiveSubPage(null);
                                 addToast({
-                                  type: 'warning',
-                                  message: 'Sign-out successful. Local security tokens revoked.'
+                                  type: 'success',
+                                  message: 'Session cleared. Returned to standard All-Access mode.'
                                 });
                               }, 1000);
                             }}
@@ -2279,8 +2449,8 @@ export default function App() {
                                 <LogOut className="w-4 h-4" />
                               </span>
                               <div className="text-left">
-                                <span className="text-xs font-bold block">Sign Out & Freeze Session</span>
-                                <span className="text-[10px] text-rose-450 block mt-0.5 text-rose-400">Safely sync with LBCL server gate</span>
+                                <span className="text-xs font-bold block">Reset All-Access Session</span>
+                                <span className="text-[10px] text-rose-400 block mt-0.5">Clear custom tokens and reload standard view</span>
                               </div>
                             </div>
                             <ChevronRight className="w-4 h-4 text-rose-300" />
