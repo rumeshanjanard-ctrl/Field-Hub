@@ -13,7 +13,7 @@ import {
   MapPin, LogOut, Loader2, Check, Send, Sparkles, Phone, User, Info, 
   Plus, X, CheckCircle, RefreshCw, SlidersHorizontal, ChevronLeft,
   DollarSign, Activity, Eye, Play, Star, Circle, Landmark, Target, Lock,
-  Sun, Moon, Bluetooth, Printer, Settings, Globe, Trash2
+  Sun, Moon, Bluetooth, Printer, Settings, Globe, Trash2, Calendar, FileSpreadsheet
 } from 'lucide-react';
 import { 
   APP_LIST, 
@@ -357,7 +357,11 @@ export default function App() {
     ];
   });
 
+  const [competitorView, setCompetitorView] = useState<'list' | 'add' | 'detail'>('list');
+  const [selectedCompetitorRecord, setSelectedCompetitorRecord] = useState<any | null>(null);
   const [isAddTrackingOpen, setIsAddTrackingOpen] = useState(false);
+  const [outletSearchQuery, setOutletSearchQuery] = useState('');
+  const [isOutletSearchDropdownOpen, setIsOutletSearchDropdownOpen] = useState(false);
   const [trackingForm, setTrackingForm] = useState<{
     outletRtCode: string;
     competitorBrand: string;
@@ -366,14 +370,16 @@ export default function App() {
     skuPrice: string;
     invoicePhoto: string | null;
     notes: string;
+    date: string;
   }>({
     outletRtCode: '',
-    competitorBrand: 'Anchor Smooth',
+    competitorBrand: '',
     skuName: '',
     skuQty: '',
     skuPrice: '',
     invoicePhoto: null,
-    notes: ''
+    notes: '',
+    date: new Date().toISOString().split('T')[0]
   });
 
   const [skuQuantities, setSkuQuantities] = useState<Record<string, string>>({
@@ -383,6 +389,10 @@ export default function App() {
     '330ml pts': '',
     'Packs': ''
   });
+
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [brandSkuQuantities, setBrandSkuQuantities] = useState<Record<string, Record<string, string>>>({});
+  const [competitorDateFilter, setCompetitorDateFilter] = useState<string>('');
 
   const [isFetchingCompetitors, setIsFetchingCompetitors] = useState(false);
 
@@ -434,7 +444,11 @@ export default function App() {
 
       if (Array.isArray(data)) {
         const mapped: CompetitorRecord[] = data.map(item => {
-          const skus = item.competitor_skus || [];
+          const rawSkus = item.competitor_skus || [];
+          const skus = rawSkus.map((s: any) => ({
+            ...s,
+            sku_type: s.sku_size || s.sku_type
+          }));
           const totalQty = skus.reduce((sum: number, s: any) => sum + (parseInt(s.quantity) || 0), 0);
           const uniqueSkusCount = skus.filter((s: any) => (parseInt(s.quantity) || 0) > 0).length;
 
@@ -466,6 +480,111 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('lbcl_competitor_records', JSON.stringify(competitorRecords));
   }, [competitorRecords]);
+
+  // Computed list of sorted and filtered competitor records
+  const sortedAndFilteredCompetitorRecords = useMemo(() => {
+    return [...competitorRecords]
+      .filter(rec => {
+        if (!competitorDateFilter) return true;
+        return rec.date === competitorDateFilter;
+      })
+      .sort((a, b) => {
+        // Sort by date descending
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        if (dateA !== dateB) {
+          return dateB.localeCompare(dateA);
+        }
+        // Secondarily sort by id descending
+        return b.id.localeCompare(a.id);
+      });
+  }, [competitorRecords, competitorDateFilter]);
+
+  // CSV Exporter for Competitor data
+  const exportCompetitorDataToCSV = () => {
+    const rows: string[][] = [];
+    
+    // CSV Header row - Competitor Brand removed, unified SKU Size/Brand used
+    rows.push([
+      'Date',
+      'RT Code',
+      'Outlet Name',
+      'SKU Size/Brand',
+      'Volume (Cases)',
+      'Field Notes'
+    ]);
+    
+    sortedAndFilteredCompetitorRecords.forEach(rec => {
+      const activeSkus = rec.skus ? rec.skus.filter((sku: any) => (parseInt(sku.quantity) || 0) > 0) : [];
+      
+      const formatSkuSizeBrand = (brand: string, skuRaw: string) => {
+        const brandClean = (brand || '').trim();
+        const skuClean = (skuRaw || '').trim();
+        if (!skuClean) return brandClean;
+        if (!brandClean) return skuClean;
+        
+        // If the SKU type already contains the brand followed by a hyphen space, return it directly
+        if (skuClean.toLowerCase().includes(brandClean.toLowerCase() + ' -')) {
+          return skuClean;
+        }
+        
+        // If the SKU type already contains a hyphen indicating it is prepopulated with brand, return it directly
+        if (skuClean.includes(' - ')) {
+          return skuClean;
+        }
+        
+        return `${brandClean} - ${skuClean}`;
+      };
+
+      if (activeSkus.length > 0) {
+        activeSkus.forEach((sku: any) => {
+          rows.push([
+            rec.date || '',
+            rec.rtCode || '',
+            rec.outletName || '',
+            formatSkuSizeBrand(rec.competitorBrand, sku.sku_type || sku.sku_size || ''),
+            String(sku.quantity || 0),
+            rec.notes || ''
+          ]);
+        });
+      } else {
+        rows.push([
+          rec.date || '',
+          rec.rtCode || '',
+          rec.outletName || '',
+          formatSkuSizeBrand(rec.competitorBrand, 'None'),
+          '0',
+          rec.notes || ''
+        ]);
+      }
+    });
+
+    const csvContent = rows
+      .map(row => 
+        row.map(val => {
+          const escaped = String(val).replace(/"/g, '""');
+          if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('\r') || escaped.includes('"')) {
+            return `"${escaped}"`;
+          }
+          return escaped;
+        }).join(',')
+      )
+      .join('\n');
+      
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `competitor_tracking_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    addToast({
+      type: 'success',
+      message: language === 'SI' ? 'Excel ගොනුව සාර්ථකව බාගන්නා ලදී.' : 'CSV report exported successfully!'
+    });
+  };
   // subPage allows full deep dive into specific apps
   const [activeSubPage, setActiveSubPage] = useState<string | null>(null);
 
@@ -1648,8 +1767,8 @@ export default function App() {
         {/* Dynamic sliding container for beautiful route transitions */}
         <div className="flex-1 flex flex-col">
           
-          {/* Header wrapper - hide only inside success screen of cooldesk */}
-          {activeSubPage === null && (
+          {/* Header wrapper - hide only inside success screen of cooldesk or full page competitor views */}
+          {activeSubPage === null && (activeTab !== 'competitor' || competitorView === 'list') && (
             <header className="bg-white px-5 pt-5 pb-4 border-b border-slate-200 sticky top-0 z-40 transition-all">
               <div className="flex justify-between items-center mb-1">
                 <div>
@@ -2614,431 +2733,950 @@ export default function App() {
 
                   {/* TAB 2: COMPETITOR TRACKING SYSTEM */}
                   {activeTab === 'competitor' && (
-                    <div className="px-5 py-4 space-y-5">
-                      
-                      {/* Competitor system welcome/stats summary panel */}
-                      <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800 flex items-center justify-between gap-4">
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-sans font-bold text-sky-400 uppercase tracking-widest block font-mono">
-                            Market Intelligence Engine
-                          </span>
-                          <h3 className="text-sm font-extrabold font-sans">
-                            {language === 'SI' ? 'පිහිටුවීම් සහ ගිණුම්' : 'Active Field Audits'}
-                          </h3>
-                          <p className="text-[11px] text-slate-400 font-medium font-sans">
-                            {competitorRecords.length} competitor logs synchronized locally
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setTrackingForm({
-                              outletRtCode: '',
-                              competitorBrand: 'Anchor Smooth',
-                              skuName: '',
-                              skuQty: '',
-                              skuPrice: '',
-                              invoicePhoto: null,
-                              notes: ''
-                            });
-                            setSkuQuantities({
-                              '625ml': '',
-                              '500ml': '',
-                              '330ml': '',
-                              '330ml pts': '',
-                              'Packs': ''
-                            });
-                            setIsAddTrackingOpen(true);
-                          }}
-                          className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border-none"
-                        >
-                          <Plus className="w-4 h-4 stroke-[2.5]" />
-                          <span>{language === 'SI' ? 'එකතු කරන්න' : 'Add Tracking'}</span>
-                        </button>
-                      </div>
-
-                      {/* Display Saved Competitor Records */}
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            {language === 'SI' ? 'පසුගිය වාර්තා' : 'Competitor Activity Feed'} ({competitorRecords.length})
-                          </h3>
-                          <span className="text-[9px] font-extrabold text-slate-400 font-mono">POS Handshake Live</span>
-                        </div>
-
-                        {competitorRecords.length > 0 ? (
-                          <div className="space-y-3">
-                            {competitorRecords.map((rec) => (
-                              <motion.div
-                                key={rec.id}
-                                layoutId={rec.id}
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs hover:shadow-sm transition-all text-left relative overflow-hidden group"
-                              >
-                                {/* Left accent strip */}
-                                <div className="absolute inset-y-0 left-0 w-1 bg-sky-500"></div>
-
-                                <div className="flex justify-between items-start gap-2 mb-2">
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[9px] font-extrabold tracking-wider font-mono">
-                                        {rec.rtCode}
-                                      </span>
-                                      <span className="text-[10px] text-slate-400 font-bold font-mono">
-                                        {rec.date}
-                                      </span>
-                                    </div>
-                                    <h4 className="font-sans font-extrabold text-sm text-slate-900 mt-1.5 group-hover:text-sky-600 transition-colors">
-                                      {rec.outletName}
-                                    </h4>
-                                  </div>
-
-                                  <span className="px-2 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[9px] font-extrabold uppercase tracking-wide font-mono shrink-0 whitespace-nowrap">
-                                    {rec.competitorBrand} - {rec.uniqueSkusCount || 0} SKUs logged
-                                  </span>
-                                </div>
-
-                                <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100">
-                                  <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">SKU Case Quantities</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {rec.skus && rec.skus.length > 0 ? (
-                                      rec.skus.filter((sku: any) => (parseInt(sku.quantity) || 0) > 0).map((sku: any) => (
-                                        <span key={sku.sku_type || sku.id} className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 rounded text-[9px] font-bold font-mono">
-                                          {sku.sku_type}: <strong className="text-slate-800 font-extrabold">{sku.quantity}</strong>
-                                        </span>
-                                      ))
-                                    ) : (
-                                      <span className="text-[10px] text-slate-400 font-sans italic">No individual SKU cases logged (Total: {rec.skuQty || 0} cases)</span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {rec.notes && (
-                                  <div className="mt-2.5 bg-slate-50 rounded-lg p-2.5 border border-slate-150 flex gap-2 items-start">
-                                    <span className="text-[14px] leading-none shrink-0 text-slate-400 select-none">✏️</span>
-                                    <p className="text-[10px] font-medium text-slate-500 leading-relaxed font-sans italic">
-                                      "{rec.notes}"
-                                    </p>
-                                  </div>
-                                )}
-
-                                {rec.invoicePhoto && (
-                                  <div className="mt-2.5 rounded-lg overflow-hidden border border-slate-200 h-20 w-fit max-w-full">
-                                    <img src={rec.invoicePhoto} alt="Invoice preview" className="h-full object-cover rounded-md" referrerPolicy="no-referrer" />
-                                  </div>
-                                )}
-                              </motion.div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="bg-white border border-slate-200 rounded-xl p-8 py-10 text-center text-slate-400 font-sans">
-                            <Store className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                            <p className="text-xs font-bold text-slate-700">No Competitor Tracking recorded yet</p>
-                            <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">
-                              Tap the 'Add Tracking' button above to audit localized competitor presence.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* ADD TRACKING DIALOG / MODAL FORM */}
-                      <AnimatePresence>
-                        {isAddTrackingOpen && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs select-none">
-                            <motion.div 
-                               initial={{ opacity: 0, scale: 0.94, y: 15 }}
-                               animate={{ opacity: 1, scale: 1, y: 0 }}
-                               exit={{ opacity: 0, scale: 0.96, y: 10 }}
-                               className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-slate-200 font-sans text-left max-h-[90vh] overflow-y-auto"
+                    <div className="min-h-full max-w-7xl mx-auto w-full">
+                      {competitorView === 'list' && (
+                        <div className="px-5 py-4 space-y-5 animate-in fade-in duration-200">
+                          
+                          {/* Competitor system welcome/stats summary panel */}
+                          <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800 flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                              <h3 className="text-base font-bold font-sans text-slate-100">
+                                Field Tracking
+                              </h3>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setTrackingForm({
+                                  outletRtCode: '',
+                                  competitorBrand: '',
+                                  skuName: '',
+                                  skuQty: '',
+                                  skuPrice: '',
+                                  invoicePhoto: null,
+                                  notes: '',
+                                  date: new Date().toISOString().split('T')[0]
+                                });
+                                setSelectedBrands([]);
+                                setBrandSkuQuantities({});
+                                setSkuQuantities({
+                                  '625ml': '',
+                                  '500ml': '',
+                                  '330ml': '',
+                                  '330ml pts': '',
+                                  'Packs': ''
+                                });
+                                setOutletSearchQuery('');
+                                setIsOutletSearchDropdownOpen(false);
+                                setCompetitorView('add');
+                              }}
+                              className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border-none font-sans"
                             >
-                              <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-150">
-                                <span className="text-sm font-extrabold flex items-center gap-2 text-slate-900">
-                                  <Activity className="w-4 h-4 text-sky-500" />
-                                  {language === 'SI' ? 'තරඟකාරී තොරතුරු එක් කිරීම' : 'Competitor Audit Log'}
+                              <Plus className="w-4 h-4 stroke-[2.5]" />
+                              <span>{language === 'SI' ? 'එකතු කරන්න' : 'Add Tracking'}</span>
+                            </button>
+                          </div>
+
+                          {/* Date Filter & Export Panel - Horizontal Utility Bar on Desktop */}
+                          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-3xs space-y-3">
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                              {/* Date Picker Input */}
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 min-w-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                                  {language === 'SI' ? 'දිනය පෙරන්න:' : 'Filter Date:'}
                                 </span>
-                                <button 
-                                  onClick={() => setIsAddTrackingOpen(false)}
-                                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer transition-colors border-none bg-transparent"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center gap-2 w-full sm:w-auto">
+                                  <div className="relative flex-1 sm:flex-none">
+                                    <input
+                                      type="date"
+                                      value={competitorDateFilter}
+                                      onChange={(e) => setCompetitorDateFilter(e.target.value)}
+                                      className="w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-500 hover:bg-slate-100 transition-all cursor-pointer font-sans"
+                                    />
+                                  </div>
+                                  {competitorDateFilter && (
+                                    <button
+                                      onClick={() => setCompetitorDateFilter('')}
+                                      className="px-2.5 py-1.5 text-[9px] font-extrabold text-sky-600 bg-sky-50 hover:bg-sky-100 active:scale-95 rounded-lg border border-sky-200/50 uppercase tracking-wider font-sans cursor-pointer transition-all shrink-0"
+                                    >
+                                      {language === 'SI' ? 'සියල්ල' : 'Show All'}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
-                              <div className="space-y-4 text-xs font-medium text-slate-700">
-                                {/* Outlet Select Dropdown */}
-                                <div>
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                                    {language === 'SI' ? 'අවුට්ලට් තෝරන්න' : 'Select Outlet'} *
-                                  </label>
-                                  <select
-                                    value={trackingForm.outletRtCode}
-                                    onChange={(e) => setTrackingForm(prev => ({ ...prev, outletRtCode: e.target.value }))}
-                                    className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500 transition-colors"
+                              {/* Export to Excel / CSV */}
+                              <button
+                                onClick={exportCompetitorDataToCSV}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 w-full lg:w-auto"
+                              >
+                                <FileSpreadsheet className="w-4 h-4" />
+                                <span>{language === 'SI' ? 'Excel ගොනුව' : 'Export to Excel'}</span>
+                              </button>
+                            </div>
+
+                            {/* Active filter description */}
+                            <div className="text-[10px] text-slate-400 font-medium font-sans flex items-center gap-1.5 border-t border-slate-100 pt-2.5">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              {competitorDateFilter ? (
+                                <span>
+                                  {language === 'SI' ? 'පෙරහන් කළ දිනය:' : 'Showing records for date:'}{' '}
+                                  <strong className="text-sky-600 font-extrabold font-mono">{competitorDateFilter}</strong>
+                                </span>
+                              ) : (
+                                <span>{language === 'SI' ? 'සියලුම පෙර පැවති වාර්තා පෙන්වයි' : 'Showing all historic records'}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Display Saved Competitor Records */}
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">
+                                {language === 'SI' ? 'පසුගිය වාර්තා' : 'Competitor Activity Feed'} ({sortedAndFilteredCompetitorRecords.length})
+                              </h3>
+                              <span className="text-[9px] font-extrabold text-slate-400 font-mono">POS Handshake Live</span>
+                            </div>
+
+                            {sortedAndFilteredCompetitorRecords.length > 0 ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                {sortedAndFilteredCompetitorRecords.map((rec) => (
+                                  <motion.div
+                                    key={rec.id}
+                                    layoutId={rec.id}
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    onClick={() => {
+                                      setSelectedCompetitorRecord(rec);
+                                      setCompetitorView('detail');
+                                    }}
+                                    className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-3xs hover:shadow-md hover:border-sky-300 lg:hover:-translate-y-0.5 transition-all duration-200 text-left relative overflow-hidden group cursor-pointer flex flex-col justify-between"
                                   >
-                                    <option value="">-- Click to choose Outlet --</option>
-                                    {outletsList.map((outlet) => (
-                                      <option key={outlet.rtCode} value={outlet.rtCode}>
-                                        [{outlet.rtCode}] {outlet.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
+                                    <div>
+                                      {/* Left accent strip */}
+                                      <div className="absolute inset-y-0 left-0 w-1 bg-sky-500"></div>
 
-                                {/* Competitor Brand Dropdown */}
-                                <div>
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                                    {language === 'SI' ? 'තරඟකාරී සන්නාමය' : 'Competitor Brand'} *
-                                  </label>
-                                  <select
-                                    value={trackingForm.competitorBrand}
-                                    onChange={(e) => setTrackingForm(prev => ({ ...prev, competitorBrand: e.target.value }))}
-                                    className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500"
-                                  >
-                                    {COMPETITOR_BRANDS.map(brand => (
-                                      <option key={brand} value={brand}>{brand}</option>
-                                    ))}
-                                  </select>
-                                </div>
+                                      <div className="flex justify-between items-start gap-2 mb-1.5 pl-1">
+                                        <div>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[8px] font-extrabold tracking-tight font-mono">
+                                              {rec.rtCode}
+                                            </span>
+                                            <span className="text-[9px] text-slate-400 font-bold font-mono">
+                                              {rec.date}
+                                            </span>
+                                          </div>
+                                          <h4 className="font-sans font-extrabold text-xs sm:text-sm text-slate-900 mt-1.5 group-hover:text-sky-600 transition-colors line-clamp-2">
+                                            {rec.outletName}
+                                          </h4>
+                                        </div>
 
-                                {/* SKU Details inputs */}
-                                <div className="p-3.5 bg-slate-50 border border-slate-150 rounded-2xl space-y-3">
-                                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block border-b border-slate-200 pb-1.5 flex justify-between items-center">
-                                    <span>{language === 'SI' ? 'පැකේජ විස්තරය' : 'SKU Quantities:'}</span>
-                                    <span className="text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full uppercase tracking-normal">Enter Case Quantities</span>
-                                  </span>
-                                  
-                                  <div className="grid grid-cols-2 gap-3 pb-1">
-                                    {(['625ml', '500ml', '330ml', '330ml pts', 'Packs'] as const).map((sku) => (
-                                      <div key={sku} className="space-y-1">
-                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider block">
-                                          {sku} Size Qty
-                                        </label>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          placeholder="0"
-                                          value={skuQuantities[sku]}
-                                          onChange={(e) => setSkuQuantities(prev => ({ ...prev, [sku]: e.target.value }))}
-                                          className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-3 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-colors"
-                                        />
+                                        <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[8px] font-extrabold tracking-tight font-mono shrink-0 whitespace-nowrap">
+                                          {rec.uniqueSkusCount || 0} SKUs
+                                        </span>
                                       </div>
-                                    ))}
-                                  </div>
-                                </div>
 
-                                {/* Invoice Photo capture / selection */}
-                                <div>
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                                    {language === 'SI' ? 'ඉන්වොයිස් පින්තූරය' : 'Invoice Photo'}
-                                  </label>
-                                  
-                                  <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center space-y-2 bg-slate-50">
-                                    {trackingForm.invoicePhoto ? (
-                                      <div className="relative inline-block">
-                                        <img 
-                                          src={trackingForm.invoicePhoto} 
-                                          alt="Invoice preview" 
-                                          className="mx-auto max-h-32 rounded-lg border object-contain shadow-xs" 
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => setTrackingForm(prev => ({ ...prev, invoicePhoto: null }))}
-                                          className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 cursor-pointer shadow-md border-none"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
+                                      {/* Brand summary pill list */}
+                                      <div className="mt-2 pl-1 flex flex-wrap gap-1">
+                                        {(rec.competitorBrand || '').split(',').map((b: string) => b.trim()).filter(Boolean).map((brand: string) => (
+                                          <span key={brand} className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-[4px] text-[7px] font-extrabold tracking-wider uppercase font-mono">
+                                            {brand}
+                                          </span>
+                                        ))}
                                       </div>
-                                    ) : (
-                                      <div className="flex flex-col items-center justify-center py-2">
-                                        <span className="text-[16px] mb-1">📷</span>
-                                        <span className="text-[10px] text-slate-400 font-bold mb-1.5 block">Record competitor bill physically</span>
-                                        
-                                        <div className="flex gap-2">
-                                          {/* Standard Native File picker */}
-                                          <label className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-[10px] shadow-xs cursor-pointer flex items-center gap-1">
-                                            <span>Attach Picture</span>
-                                            <input 
-                                              type="file" 
-                                              accept="image/*" 
-                                              className="hidden" 
-                                              onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                  const reader = new FileReader();
-                                                  reader.onloadend = () => {
-                                                    setTrackingForm(prev => ({ ...prev, invoicePhoto: reader.result as string }));
-                                                  };
-                                                  reader.readAsDataURL(file);
-                                                }
-                                              }}
-                                            />
-                                          </label>
 
-                                          {/* Mock generator button */}
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setTrackingForm(prev => ({
-                                                ...prev,
-                                                invoicePhoto: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=400&q=80'
-                                              }));
-                                            }}
-                                            className="bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 font-semibold px-2.5 py-1.5 rounded-lg text-[10px] cursor-pointer"
-                                          >
-                                            Demo Snap
-                                          </button>
+                                      <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100 pl-1">
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-1">SKUs Logged</span>
+                                        <div className="flex flex-wrap gap-1">
+                                          {rec.skus && rec.skus.length > 0 ? (
+                                            rec.skus.filter((sku: any) => (parseInt(sku.quantity) || 0) > 0).map((sku: any) => (
+                                              <span key={sku.sku_type || sku.id} className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 rounded text-[8px] font-bold font-mono">
+                                                {sku.sku_type}: <strong className="text-slate-800 font-extrabold">{sku.quantity}</strong>
+                                              </span>
+                                            ))
+                                          ) : (
+                                            <span className="text-[9px] text-slate-450 font-sans italic">No individual SKU cases logged (Total: {rec.skuQty || 0})</span>
+                                          )}
                                         </div>
                                       </div>
+                                    </div>
+
+                                    {rec.notes && (
+                                      <div className="mt-3 bg-slate-50 rounded-lg p-1.5 px-2 border border-slate-150 flex gap-1.5 items-center pl-1.5">
+                                        <span className="text-[12px] leading-none shrink-0 text-slate-400 select-none">✏️</span>
+                                        <p className="text-[9px] font-medium text-slate-500 leading-normal font-sans italic line-clamp-1">
+                                          "{rec.notes}"
+                                        </p>
+                                      </div>
                                     )}
-                                  </div>
-                                </div>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            ) : competitorRecords.length > 0 ? (
+                              <div className="bg-white border border-slate-200 rounded-xl p-8 py-10 text-center text-slate-400 font-sans">
+                                <Calendar className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                                <p className="text-xs font-bold text-slate-700">
+                                  {language === 'SI' ? 'මෙම දිනය සඳහා වාර්තා නොමැත' : 'No entries found for this date'}
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">
+                                  {language === 'SI' ? 'වෙනත් දිනයක් තෝරන්න හෝ පෙරහන ඉවත් කරන්න.' : 'Try choosing another date or clear active filters.'}
+                                </p>
+                                <button
+                                  onClick={() => setCompetitorDateFilter('')}
+                                  className="mt-3 px-3.5 py-1.5 text-[10px] font-bold text-sky-650 bg-sky-50 border border-sky-100 hover:bg-sky-100 rounded-lg transition-all shrink-0 cursor-pointer"
+                                >
+                                  {language === 'SI' ? 'සියල්ල පෙන්වන්න' : 'Show All Records'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="bg-white border border-slate-200 rounded-xl p-8 py-10 text-center text-slate-400 font-sans">
+                                <Store className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                                <p className="text-xs font-bold text-slate-700">No Competitor Tracking recorded yet</p>
+                                <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">
+                                  Tap the 'Add Tracking' button above to audit localized competitor presence.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
-                                {/* Notes Notepad field */}
-                                <div>
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-                                    {language === 'SI' ? 'සටහන්' : 'Observations Notes'}
-                                  </label>
-                                  <textarea
-                                    placeholder="e.g. competitors launching new display cooler shelf tags."
-                                    rows={2}
-                                    value={trackingForm.notes}
-                                    onChange={(e) => setTrackingForm(prev => ({ ...prev, notes: e.target.value }))}
-                                    className="w-full border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
-                                  />
-                                </div>
+                      {competitorView === 'add' && (
+                        <div className="px-5 py-4 space-y-5 animate-in fade-in duration-200 font-sans">
+                          {/* Dedicated full page header */}
+                          <div className="flex items-center gap-3 border-b border-slate-150 pb-3">
+                            <button
+                              onClick={() => {
+                                setCompetitorView('list');
+                              }}
+                              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 cursor-pointer transition-colors border-none"
+                            >
+                              <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                            </button>
+                            <div>
+                              <span className="text-[10px] font-sans font-bold text-sky-500 uppercase tracking-widest block font-mono">
+                                {language === 'SI' ? 'පැමිණීම් වාර්තාව' : 'Market Intelligence'}
+                              </span>
+                              <h2 className="text-lg font-extrabold text-slate-900 font-sans">
+                                Field Tracking
+                              </h2>
+                            </div>
+                          </div>
 
-                                {/* Form Action Buttons */}
-                                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs font-medium text-slate-700">
+                            
+                            {/* Left Column: Searchable Outlet dropdown, Date Picker, multi-brand selection checklist, and Field Notes */}
+                            <div className="space-y-4">
+                              {/* Outlet Select Dropdown with Search capabilities */}
+                            <div className="relative">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                                {language === 'SI' ? 'අවුට්ලට් තෝරන්න' : 'Select Outlet'} *
+                              </label>
+                              
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={
+                                    isOutletSearchDropdownOpen
+                                      ? outletSearchQuery
+                                      : trackingForm.outletRtCode
+                                      ? (() => {
+                                          const matched = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
+                                          return matched ? `[${matched.rtCode}] ${matched.name}` : '';
+                                        })()
+                                      : outletSearchQuery
+                                  }
+                                  onFocus={() => {
+                                    setIsOutletSearchDropdownOpen(true);
+                                    const matched = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
+                                    if (matched) {
+                                      setOutletSearchQuery(matched.name);
+                                    } else {
+                                      setOutletSearchQuery('');
+                                    }
+                                  }}
+                                  onChange={(e) => {
+                                    setOutletSearchQuery(e.target.value);
+                                    setIsOutletSearchDropdownOpen(true);
+                                  }}
+                                  placeholder="Type name or RT Code to search..."
+                                  className="w-full bg-white border border-slate-300 rounded-xl py-2 pl-3 pr-10 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500 transition-colors"
+                                />
+                                
+                                {/* Clear/Reset button */}
+                                {trackingForm.outletRtCode ? (
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setIsAddTrackingOpen(false);
+                                      setTrackingForm(prev => ({ ...prev, outletRtCode: '' }));
+                                      setOutletSearchQuery('');
                                     }}
-                                    className="py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-500 text-center cursor-pointer transition-colors bg-transparent"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors border-none bg-transparent active:scale-95 cursor-pointer z-10"
                                   >
-                                    Cancel
+                                    <X className="w-3.5 h-3.5" />
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (!trackingForm.outletRtCode) {
-                                        addToast({ type: 'warning', message: 'Please select an outlet from the dropdown.' });
-                                        return;
+                                ) : (
+                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[11px] leading-none select-none">🔍</span>
+                                )}
+                              </div>
+
+                              {/* Filtered Dropdown Popover */}
+                              {isOutletSearchDropdownOpen && (
+                                <>
+                                  {/* Click outside backdrop overlay */}
+                                  <div 
+                                    className="fixed inset-0 z-45 bg-transparent" 
+                                    onClick={() => {
+                                      setIsOutletSearchDropdownOpen(false);
+                                      const matched = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
+                                      if (matched) {
+                                        setOutletSearchQuery(`[${matched.rtCode}] ${matched.name}`);
+                                      } else {
+                                        setOutletSearchQuery('');
+                                      }
+                                    }}
+                                  />
+                                  
+                                  {/* Dropdown Items list container */}
+                                  <div className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
+                                    {(() => {
+                                      const filtered = outletsList.filter(o => 
+                                        o.name.toLowerCase().includes(outletSearchQuery.toLowerCase()) || 
+                                        o.rtCode.toLowerCase().includes(outletSearchQuery.toLowerCase())
+                                      );
+                                      
+                                      if (filtered.length === 0) {
+                                        return (
+                                          <div className="px-3 py-2 text-xs text-slate-450 italic">
+                                            No matching outlets found
+                                          </div>
+                                        );
                                       }
                                       
-                                      const matchedOutlet = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
-                                      if (!matchedOutlet) {
-                                        addToast({ type: 'error', message: 'Unable to match selected outlet.' });
-                                        return;
+                                      return filtered.map((outlet) => (
+                                        <button
+                                          key={outlet.rtCode}
+                                          type="button"
+                                          onClick={() => {
+                                            setTrackingForm(prev => ({ ...prev, outletRtCode: outlet.rtCode }));
+                                            setOutletSearchQuery(`[${outlet.rtCode}] ${outlet.name}`);
+                                            setIsOutletSearchDropdownOpen(false);
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 text-slate-700 hover:text-sky-600 flex flex-col gap-0.5 border-none bg-transparent cursor-pointer transition-colors"
+                                        >
+                                          <span className="font-extrabold">
+                                            {outlet.name}
+                                          </span>
+                                          <span className="text-[9px] text-slate-400 font-mono">
+                                            [{outlet.rtCode}] {outlet.address || ''}
+                                          </span>
+                                        </button>
+                                      ));
+                                    })()}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Date Input / Date Picker */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                                {language === 'SI' ? 'දිනය' : 'Capture Date'} *
+                              </label>
+                              <input
+                                type="date"
+                                value={trackingForm.date || new Date().toISOString().split('T')[0]}
+                                onChange={(e) => setTrackingForm(prev => ({ ...prev, date: e.target.value }))}
+                                className="w-full bg-white border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 font-semibold focus:outline-none focus:border-sky-500 transition-colors"
+                              />
+                            </div>
+
+                            {/* Competitor Brands Multi-Select Checklist Grid */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 font-sans">
+                                {language === 'SI' ? 'තරඟකාරී සන්නාම (බහු තේරීම්)' : 'Competitor Brands (Select Multiple)'} *
+                              </label>
+                              
+                              <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-3xs max-h-56 overflow-y-auto space-y-1.5 scrollbar-thin">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                  {COMPETITOR_BRANDS.map((brand) => {
+                                    const isSelected = selectedBrands.includes(brand);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={brand}
+                                        onClick={() => {
+                                          if (isSelected) {
+                                            setSelectedBrands(prev => prev.filter(b => b !== brand));
+                                          } else {
+                                            setSelectedBrands(prev => [...prev, brand]);
+                                            if (!brandSkuQuantities[brand]) {
+                                              setBrandSkuQuantities(prev => ({
+                                                ...prev,
+                                                [brand]: {
+                                                  '625ml': '',
+                                                  '500ml': '',
+                                                  '330ml': '',
+                                                  '330ml pts': '',
+                                                  'Packs': ''
+                                                }
+                                              }));
+                                            }
+                                          }
+                                        }}
+                                        className={`px-3 py-2 rounded-xl text-left border flex items-center gap-2 transition-all cursor-pointer select-none bg-transparent ${
+                                          isSelected 
+                                            ? 'bg-sky-50 border-sky-400 text-sky-750 shadow-3xs font-extrabold' 
+                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
+                                        }`}
+                                      >
+                                        <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 transition-colors border ${
+                                          isSelected ? 'bg-sky-500 border-sky-500 text-white' : 'bg-white border-slate-300'
+                                        }`}>
+                                          {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                        </div>
+                                        <span className="text-[10px] truncate leading-none">{brand}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Observations Notes (Moved here to remain in Left Column on Desktop) */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 font-sans">
+                                {language === 'SI' ? 'සටහන්' : 'Observations Notes'}
+                              </label>
+                              <textarea
+                                placeholder="e.g. competitors launching new display cooler shelf tags."
+                                rows={3}
+                                value={trackingForm.notes}
+                                onChange={(e) => setTrackingForm(prev => ({ ...prev, notes: e.target.value }))}
+                                className="w-full border border-slate-300 rounded-xl py-2 px-3 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Right Column: Dynamically expanding SKU quantity input blocks and the Invoice Photo upload box */}
+                          <div className="space-y-4">
+                            {/* SKU Details inputs - Multi-brand Matrices */}
+                            {selectedBrands.length > 0 ? (
+                              <div className="space-y-4">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">
+                                  {language === 'SI' ? 'සන්නාම අනුව පැකේජ විස්තර' : 'SKU Matrices by Competitor Brand'}
+                                </span>
+                                
+                                {selectedBrands.map((brand) => (
+                                  <div key={brand} className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-3xs hover:border-sky-200 transition-all">
+                                    <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                      <span className="px-2.5 py-0.5 bg-red-50 text-red-650 border border-red-105 rounded-lg text-[10px] font-extrabold uppercase font-mono">
+                                        {brand}
+                                      </span>
+                                      <span className="text-[9px] font-bold text-slate-400">Enter Cases</span>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                      {(['625ml', '500ml', '330ml', '330ml pts', 'Packs'] as const).map((sku) => {
+                                        const qtyValue = brandSkuQuantities[brand]?.[sku] || '';
+                                        return (
+                                          <div key={sku} className="space-y-1">
+                                            <label className="text-[8px] font-extrabold text-slate-400 block tracking-tight">
+                                              {sku}
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              placeholder="0"
+                                              value={qtyValue}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                setBrandSkuQuantities(prev => ({
+                                                  ...prev,
+                                                  [brand]: {
+                                                    ...(prev[brand] || {
+                                                      '625ml': '',
+                                                      '500ml': '',
+                                                      '330ml': '',
+                                                      '330ml pts': '',
+                                                      'Packs': ''
+                                                    }),
+                                                    [sku]: val
+                                                  }
+                                                }));
+                                              }}
+                                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1 px-2.5 text-xs font-semibold focus:outline-none focus:border-sky-500 focus:bg-white transition-all text-slate-800"
+                                            />
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-5 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl text-[11px] text-slate-400 italic font-sans py-7">
+                                Please select at least one competitor brand above to customize SKU matrices.
+                              </div>
+                            )}
+
+                            {/* Invoice Photo capture / selection */}
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1 font-sans">
+                                {language === 'SI' ? 'ඉන්වොයිස් පින්තූරය' : 'Invoice Photo'}
+                              </label>
+                              
+                              <div className="border border-dashed border-slate-300 rounded-xl p-3 text-center space-y-2 bg-slate-50">
+                                {trackingForm.invoicePhoto ? (
+                                  <div className="relative inline-block">
+                                    <img 
+                                      src={trackingForm.invoicePhoto} 
+                                      alt="Invoice preview" 
+                                      className="mx-auto max-h-32 rounded-lg border object-contain shadow-xs" 
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setTrackingForm(prev => ({ ...prev, invoicePhoto: null }))}
+                                      className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 cursor-pointer shadow-md border-none"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center py-2">
+                                    <span className="text-[16px] mb-1">📷</span>
+                                    <span className="text-[10px] text-slate-400 font-bold mb-1.5 block">Record competitor bill physically</span>
+                                    
+                                    <div className="flex gap-2">
+                                      {/* Standard Native File picker */}
+                                      <label className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold px-3 py-1.5 rounded-lg text-[10px] shadow-xs cursor-pointer flex items-center gap-1">
+                                        <span>Attach Picture</span>
+                                        <input 
+                                          type="file" 
+                                          accept="image/*" 
+                                          className="hidden" 
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                              const reader = new FileReader();
+                                              reader.onloadend = () => {
+                                                setTrackingForm(prev => ({ ...prev, invoicePhoto: reader.result as string }));
+                                              };
+                                              reader.readAsDataURL(file);
+                                            }
+                                          }}
+                                        />
+                                      </label>
+
+                                      {/* Mock generator button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTrackingForm(prev => ({
+                                            ...prev,
+                                            invoicePhoto: 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?auto=format&fit=crop&w=400&q=80'
+                                          }));
+                                        }}
+                                        className="bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 font-semibold px-2.5 py-1.5 rounded-lg text-[10px] cursor-pointer"
+                                      >
+                                        Demo Snap
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Form Action Buttons */}
+                          <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-150">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCompetitorView('list');
+                                }}
+                                className="py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-500 text-center cursor-pointer transition-colors bg-transparent"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!trackingForm.outletRtCode) {
+                                    addToast({ type: 'warning', message: 'Please select an outlet from the dropdown.' });
+                                    return;
+                                  }
+
+                                  if (selectedBrands.length === 0) {
+                                    addToast({ type: 'warning', message: 'Please select at least one competitor brand.' });
+                                    return;
+                                  }
+                                  
+                                  const matchedOutlet = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
+                                  if (!matchedOutlet) {
+                                    addToast({ type: 'error', message: 'Unable to match selected outlet.' });
+                                    return;
+                                  }
+
+                                  // OPTIMISTIC UPDATE:
+                                  // 1. Calculate and map all SKUs list across multiple selected brands
+                                  const localSkus: { sku_type: string; sku_id: string; quantity: number }[] = [];
+                                  selectedBrands.forEach(brand => {
+                                    const quantities = brandSkuQuantities[brand] || {};
+                                    Object.entries(quantities).forEach(([skuType, qtyStr]) => {
+                                      const qtyNum = parseInt(qtyStr as string) || 0;
+                                      if (qtyNum > 0) {
+                                        localSkus.push({
+                                          sku_type: `${brand} - ${skuType}`,
+                                          sku_id: `${brand} - ${skuType}`,
+                                          quantity: qtyNum
+                                        });
+                                      }
+                                    });
+                                  });
+
+                                  const calculatedTotal = localSkus.reduce((sum, s) => sum + s.quantity, 0);
+                                  const uniqueCount = localSkus.length;
+                                  const commaSeparatedBrands = selectedBrands.join(', ');
+
+                                  const tempId = `competitor-temp-${Date.now()}`;
+
+                                  // Build the transient UI record representation instantly
+                                  const optimisticRecord: CompetitorRecord = {
+                                    id: tempId,
+                                    outletName: matchedOutlet.name,
+                                    rtCode: matchedOutlet.rtCode,
+                                    competitorBrand: commaSeparatedBrands,
+                                    invoicePhoto: trackingForm.invoicePhoto,
+                                    notes: trackingForm.notes,
+                                    date: trackingForm.date || new Date().toISOString().split('T')[0],
+                                    skus: localSkus,
+                                    totalSkuQty: calculatedTotal,
+                                    uniqueSkusCount: uniqueCount,
+                                    skuQty: String(calculatedTotal)
+                                  };
+
+                                  // Update state immediately
+                                  setCompetitorRecords(prev => [optimisticRecord, ...prev]);
+
+                                  // Instantly Alert success and navigate back
+                                  addToast({ type: 'success', message: 'Competitor tracking saved successfully!' });
+                                  setCompetitorView('list');
+
+                                  // Begin completely non-blocking background save process
+                                  (async () => {
+                                    try {
+                                      const primaryRow = {
+                                        se_code: profile?.se_code || 'ALL_ACCESS',
+                                        rt_code: matchedOutlet.rtCode,
+                                        outlet_name: matchedOutlet.name,
+                                        competitor_brand: commaSeparatedBrands,
+                                        notes: trackingForm.notes,
+                                        invoice_photo_url: trackingForm.invoicePhoto
+                                      };
+
+                                      const response = await fetch(`${SUPABASE_URL}competitor_tracking`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'apikey': SUPABASE_ANON_KEY,
+                                          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                                          'Content-Type': 'application/json',
+                                          'Prefer': 'return=representation'
+                                        },
+                                        body: JSON.stringify(primaryRow)
+                                      });
+
+                                      let trackingId = tempId;
+                                      if (response.ok) {
+                                        const resData = await response.json();
+                                        const insertedRow = Array.isArray(resData) ? resData[0] : resData;
+                                        if (insertedRow && insertedRow.id) {
+                                          trackingId = String(insertedRow.id);
+
+                                          // Bind real key/ID back to the local records array
+                                          setCompetitorRecords(prev => prev.map(rec => {
+                                            if (rec.id === tempId) {
+                                              return { ...rec, id: trackingId };
+                                            }
+                                            return rec;
+                                          }));
+                                        }
                                       }
 
-                                      try {
-                                        // 1. Insert primary row into 'competitor_tracking' Table
-                                        const primaryRow = {
-                                          se_code: profile?.se_code || 'ALL_ACCESS',
-                                          rt_code: matchedOutlet.rtCode,
-                                          outlet_name: matchedOutlet.name,
-                                          competitor_brand: trackingForm.competitorBrand,
-                                          notes: trackingForm.notes,
-                                          invoice_photo_url: trackingForm.invoicePhoto,
-                                          invoice_photo: trackingForm.invoicePhoto
-                                        };
+                                      // 3. Setup and post tracking SKUs for ALL selected brands in ONE giant batch insert
+                                      const skusToInsert: { tracking_id: string; sku_size: string; quantity: number }[] = [];
+                                      selectedBrands.forEach(brand => {
+                                        const quantities = brandSkuQuantities[brand] || {};
+                                        Object.entries(quantities).forEach(([skuType, qtyStr]) => {
+                                          const qtyNum = parseInt(qtyStr as string) || 0;
+                                          if (qtyNum > 0) {
+                                            skusToInsert.push({
+                                              tracking_id: trackingId,
+                                              sku_size: `${brand} - ${skuType}`,
+                                              quantity: qtyNum
+                                            });
+                                          }
+                                        });
+                                      });
 
-                                        const response = await fetch(`${SUPABASE_URL}competitor_tracking`, {
+                                      if (skusToInsert.length > 0) {
+                                        await fetch(`${SUPABASE_URL}competitor_skus`, {
                                           method: 'POST',
                                           headers: {
                                             'apikey': SUPABASE_ANON_KEY,
                                             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                                            'Content-Type': 'application/json',
-                                            'Prefer': 'return=representation'
+                                            'Content-Type': 'application/json'
                                           },
-                                          body: JSON.stringify(primaryRow)
+                                          body: JSON.stringify(skusToInsert)
                                         });
-
-                                        let trackingId = `temp-${Date.now()}`;
-                                        if (response.ok) {
-                                          const resData = await response.json();
-                                          const insertedRow = Array.isArray(resData) ? resData[0] : resData;
-                                          if (insertedRow && insertedRow.id) {
-                                            trackingId = String(insertedRow.id);
-                                          }
-                                        } else {
-                                          console.warn(`Tracking insert failed with status ${response.status}, using self-signed lookup ID`);
-                                        }
-
-                                        // 2. Prepare SKU list rows
-                                        const skusToInsert = Object.entries(skuQuantities)
-                                          .map(([skuType, qtyStr]) => {
-                                            const qtyNum = parseInt(qtyStr as string) || 0;
-                                            return {
-                                              tracking_id: trackingId,
-                                              sku_type: skuType,
-                                              quantity: qtyNum
-                                            };
-                                          })
-                                          .filter(s => s.quantity > 0);
-
-                                        // 3. Save SKUs to competitor_skus Table
-                                        if (skusToInsert.length > 0) {
-                                          const skusResponse = await fetch(`${SUPABASE_URL}competitor_skus`, {
-                                            method: 'POST',
-                                            headers: {
-                                              'apikey': SUPABASE_ANON_KEY,
-                                              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                                              'Content-Type': 'application/json'
-                                            },
-                                            body: JSON.stringify(skusToInsert)
-                                          });
-                                          if (!skusResponse.ok) {
-                                            console.warn(`SKU insert returned status ${skusResponse.status}`);
-                                          }
-                                        }
-
-                                        addToast({ type: 'success', message: 'Competitor tracking successfully saved!' });
-                                        fetchCompetitorRecordsFromSupabase();
-                                      } catch (err: any) {
-                                        console.error("Supabase write failure, committing locally:", err);
-                                        // Failover local fallback state
-                                        const calculatedSkus = Object.entries(skuQuantities).map(([type, qty]) => ({
-                                          sku_type: type,
-                                          sku_id: type,
-                                          quantity: parseInt(qty as string) || 0
-                                        }));
-                                        const calculatedTotal = calculatedSkus.reduce((sum, s) => sum + s.quantity, 0);
-                                        const uniqueCount = calculatedSkus.filter(s => s.quantity > 0).length;
-
-                                        const newRecord: CompetitorRecord = {
-                                          id: `competitor-${Date.now()}`,
-                                          outletName: matchedOutlet.name,
-                                          rtCode: matchedOutlet.rtCode,
-                                          competitorBrand: trackingForm.competitorBrand,
-                                          invoicePhoto: trackingForm.invoicePhoto,
-                                          notes: trackingForm.notes,
-                                          date: new Date().toISOString().split('T')[0],
-                                          skus: calculatedSkus,
-                                          totalSkuQty: calculatedTotal,
-                                          uniqueSkusCount: uniqueCount,
-                                          skuQty: String(calculatedTotal)
-                                        };
-                                        setCompetitorRecords(prev => [newRecord, ...prev]);
-                                        addToast({ type: 'warning', message: 'Active audit logs recorded offline successfully.' });
-                                      } finally {
-                                        setIsAddTrackingOpen(false);
                                       }
-                                    }}
-                                    className="py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-center text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 border-none"
-                                  >
-                                    <Check className="w-4 h-4" />
-                                    <span>{language === 'SI' ? 'සුරකින්න' : 'Save Record'}</span>
-                                  </button>
+
+                                      // Silently cache/fetch from DB to absolute sync
+                                      fetchCompetitorRecordsFromSupabase();
+                                    } catch (err) {
+                                      console.warn("Background persistence fallback handled successfully:", err);
+                                    }
+                                  })();
+                                }}
+                                className="py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-center text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 border-none font-sans"
+                              >
+                                <Check className="w-4 h-4" />
+                                <span>{language === 'SI' ? 'සුරකින්න' : 'Save Record'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {competitorView === 'detail' && selectedCompetitorRecord && (
+                        <div className="px-5 py-4 space-y-5 animate-in fade-in duration-200 text-left font-sans">
+                          
+                          {/* Back Header */}
+                          <div className="flex items-center gap-3 border-b border-slate-150 pb-3">
+                            <button
+                              onClick={() => {
+                                setSelectedCompetitorRecord(null);
+                                setCompetitorView('list');
+                              }}
+                              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-650 cursor-pointer transition-colors border-none"
+                            >
+                              <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                            </button>
+                            <div>
+                              <span className="text-[10px] font-sans font-bold text-rose-500 uppercase tracking-widest block font-mono">
+                                Audit Intelligence Log
+                              </span>
+                              <h2 className="text-lg font-extrabold text-slate-900 font-sans">
+                                Field Tracking Detail
+                              </h2>
+                            </div>
+                          </div>
+
+                          {/* Relational Outlet Information Card */}
+                          {(() => {
+                            const matchedOutlet = outletsList.find(o => o.rtCode === selectedCompetitorRecord.rtCode);
+                            return (
+                              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 shadow-2xs">
+                                <div className="flex items-start gap-3">
+                                  <div className="p-2.5 bg-sky-100 rounded-xl text-sky-600 mt-0.5 shrink-0">
+                                    <Store className="w-5 h-5 text-sky-600" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] font-extrabold font-mono text-slate-400 block tracking-tight uppercase">Selected Outlet</span>
+                                    <h4 className="font-sans font-extrabold text-slate-900 text-sm leading-snug">
+                                      {selectedCompetitorRecord.outletName}
+                                    </h4>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200/60 text-[11px] leading-relaxed">
+                                  <div>
+                                    <span className="text-[8px] font-bold uppercase text-slate-405 tracking-wider block mb-0.5">RT Code</span>
+                                    <span className="font-bold text-slate-800 font-mono text-xs">{selectedCompetitorRecord.rtCode}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] font-bold uppercase text-slate-405 tracking-wider block mb-0.5">Distribution Route</span>
+                                    <span className="font-semibold text-slate-700 truncate block">
+                                      {matchedOutlet?.address || 'Territory Delivery Circle'}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                            </motion.div>
-                          </div>
-                        )}
-                      </AnimatePresence>
+                            );
+                          })()}
 
+                          {/* Meta grid and SKU Breakdown */}
+                          {(() => {
+                            const recordBrands = selectedCompetitorRecord.competitorBrand 
+                              ? selectedCompetitorRecord.competitorBrand.split(',').map((b: string) => b.trim()).filter(Boolean)
+                              : [];
+
+                            if (recordBrands.length === 0) {
+                              recordBrands.push(selectedCompetitorRecord.competitorBrand || 'Unknown Brand');
+                            }
+
+                            const groupedSkuLists: Record<string, { size: string; qty: number }[]> = {};
+                            recordBrands.forEach((b: string) => {
+                              groupedSkuLists[b] = [];
+                            });
+
+                            if (selectedCompetitorRecord.skus && selectedCompetitorRecord.skus.length > 0) {
+                              selectedCompetitorRecord.skus.forEach((sku: any) => {
+                                const rawSkuType = sku.sku_type || sku.sku_size || '';
+                                const qty = parseInt(sku.quantity) || 0;
+
+                                if (rawSkuType.includes(' - ')) {
+                                  const parts = rawSkuType.split(' - ');
+                                  const brandName = parts[0].trim();
+                                  const skuSize = parts.slice(1).join(' - ').trim();
+
+                                  if (brandName && recordBrands.includes(brandName)) {
+                                    groupedSkuLists[brandName].push({ size: skuSize, qty });
+                                  } else {
+                                    const matchedBrand = recordBrands.find((rb: string) => rb.toLowerCase() === brandName.toLowerCase());
+                                    if (matchedBrand) {
+                                      groupedSkuLists[matchedBrand].push({ size: skuSize, qty });
+                                    } else if (recordBrands.length > 0) {
+                                      groupedSkuLists[recordBrands[0]].push({ size: rawSkuType, qty });
+                                    }
+                                  }
+                                } else {
+                                  if (recordBrands.length > 0) {
+                                    groupedSkuLists[recordBrands[0]].push({ size: rawSkuType, qty });
+                                  }
+                                }
+                              });
+                            }
+
+                            return (
+                              <>
+                                {/* Meta grid */}
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-3xs">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Competitor Brands</span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {recordBrands.map((b: string) => (
+                                        <span key={b} className="px-2 py-0.5 bg-red-50 text-red-650 border border-red-100 rounded text-[9px] font-extrabold uppercase font-mono block">
+                                          {b}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-3xs">
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Captured Date</span>
+                                    <span className="px-2 py-1 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-extrabold font-mono block text-center">
+                                      {selectedCompetitorRecord.date}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Structured Multi-Brand SKU Breakdown Section */}
+                                <div className="space-y-4">
+                                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-1 font-mono">
+                                    Captured SKU Quantities
+                                  </span>
+
+                                  {recordBrands.map((brand: string) => {
+                                    const skusForBrand = groupedSkuLists[brand] || [];
+                                    const activeSkus = skusForBrand.filter(s => s.qty > 0);
+
+                                    return (
+                                      <div key={brand} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-3xs space-y-3">
+                                        <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                          <span className="px-2.5 py-0.5 bg-red-50 text-red-650 border border-red-100 rounded-lg text-[10px] font-extrabold uppercase font-mono">
+                                            {brand}
+                                          </span>
+                                          <span className="text-[9px] font-extrabold text-slate-400 font-mono">
+                                            {activeSkus.length} SKU sizes active
+                                          </span>
+                                        </div>
+
+                                        {skusForBrand.length > 0 ? (
+                                          <div className="grid grid-cols-2 gap-2.5">
+                                            {skusForBrand.map((sku, idx) => (
+                                              <div 
+                                                key={idx} 
+                                                className={`flex justify-between items-center px-3 py-2 rounded-xl border transition-all ${
+                                                  sku.qty > 0 
+                                                    ? 'bg-sky-50/50 border-sky-100 text-slate-800 font-bold' 
+                                                    : 'bg-slate-50/45 border-slate-100 text-slate-450'
+                                                }`}
+                                              >
+                                                <span className="text-[10px] font-sans font-semibold">{sku.size}</span>
+                                                <span className={`text-xs font-black font-mono ${sku.qty > 0 ? 'text-sky-600' : 'text-slate-350'}`}>
+                                                  {sku.qty} cs
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="py-3 text-center text-[10px] text-slate-400 italic">
+                                            No cases logged for this competitor brand.
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            );
+                          })()}
+
+                          {/* Observations Notepad */}
+                          <div className="bg-amber-50/40 border border-amber-200/60 rounded-2xl p-4 shadow-3xs relative overflow-hidden">
+                            <span className="text-[9px] font-extrabold text-amber-600/85 uppercase tracking-widest block mb-2 font-mono">
+                              Observations Notes
+                            </span>
+                            <p className="text-slate-700 text-xs font-medium leading-relaxed italic relative z-10 font-sans">
+                              {selectedCompetitorRecord.notes ? `"${selectedCompetitorRecord.notes}"` : 'No technical notes recorded.'}
+                            </p>
+                          </div>
+
+                          {/* Invoice photo rendering */}
+                          <div>
+                            <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block mb-2 font-mono">
+                              Associated Invoice Photo
+                            </span>
+
+                            {selectedCompetitorRecord.invoicePhoto ? (
+                              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-2.5 overflow-hidden shadow-xs flex flex-col items-center justify-center">
+                                <img 
+                                  src={selectedCompetitorRecord.invoicePhoto} 
+                                  alt="Captured audit document" 
+                                  className="rounded-xl max-h-[220px] w-auto max-w-full object-contain border border-slate-150 shadow-3xs"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <span className="text-[9px] font-bold text-slate-400 mt-2 font-mono flex items-center gap-1.5">
+                                  <span>📷 Document Proof</span>
+                                  <span>•</span>
+                                  <span>Offline Safe Synchronized</span>
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-6 text-center text-[11px] text-slate-400 font-sans py-8">
+                                <span className="text-[18px] mb-1">📇</span>
+                                <h5 className="font-extrabold text-slate-600">No physical photo document paper attached</h5>
+                                <p className="text-[9px] text-slate-450 mt-1">Visit audited via immediate SKU volume counters.</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Detail Back Button Footer */}
+                          <div className="pt-3 border-t border-slate-100 flex justify-end">
+                            <button
+                              onClick={() => {
+                                setSelectedCompetitorRecord(null);
+                                setCompetitorView('list');
+                              }}
+                              className="py-2.5 px-5 rounded-xl bg-slate-900 hover:bg-slate-950 text-white text-xs font-bold shadow-md transition-all cursor-pointer border-none font-sans"
+                            >
+                              Return to Dashboard
+                            </button>
+                          </div>
+
+                        </div>
+                      )}
                     </div>
                   )}
 
