@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 // @ts-ignore
 import loginWallArtBg from './assets/images/login_wall_art_1781191937515.jpg';
 import { motion, AnimatePresence } from 'motion/react';
@@ -25,10 +26,15 @@ import {
   NotificationItem, 
   Outlet 
 } from './data';
+import { exportCompetitorListToPDF, exportSingleCompetitorRecordToPDF } from './utils/pdfExport';
+import { FileText } from 'lucide-react';
 
-// Supabase REST client configuration
+// Supabase REST client configuration & JS SDK client creation
 const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || 'https://kbgtkoymrmpyltxoqdcz.supabase.co/rest/v1/';
 const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZ3Rrb3ltcm1weWx0eG9xZGN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2Njg5NDAsImV4cCI6MjA5NjI0NDk0MH0.7vck5MEQUf8oC8SE8VRTa-VzWYzBSczNXEYFBwEWsEM';
+
+const cleanSupabaseUrl = SUPABASE_URL.split('/rest/v1/')[0];
+const supabase = createClient(cleanSupabaseUrl, SUPABASE_ANON_KEY);
 
 // Resolve standard or external email formats to the corresponding active 'se_code'
 const resolveSeCodeFromEmail = (email: string, outlets?: Outlet[]): string => {
@@ -395,6 +401,39 @@ export default function App() {
   const [competitorDateFilter, setCompetitorDateFilter] = useState<string>('');
 
   const [isFetchingCompetitors, setIsFetchingCompetitors] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  const handleExportListToPDF = async () => {
+    setIsGeneratingPDF(true);
+    addToast({ type: 'success', message: 'Generating PDF Summary...' });
+    setTimeout(async () => {
+      try {
+        await exportCompetitorListToPDF(sortedAndFilteredCompetitorRecords, competitorDateFilter);
+        addToast({ type: 'success', message: 'PDF report summary downloaded!' });
+      } catch (err) {
+        console.error('[PDF Export Error]', err);
+        addToast({ type: 'error', message: 'Could not render PDF document.' });
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    }, 400);
+  };
+
+  const handleExportSingleRecordToPDF = async (record: any) => {
+    setIsGeneratingPDF(true);
+    addToast({ type: 'success', message: 'Compiling photo with audit metadata...' });
+    setTimeout(async () => {
+      try {
+        await exportSingleCompetitorRecordToPDF(record, outletsList);
+        addToast({ type: 'success', message: 'Detailed PDF with photo downloaded!' });
+      } catch (err) {
+        console.error('[PDF Export Error]', err);
+        addToast({ type: 'error', message: 'Could not compile photo PDF.' });
+      } finally {
+        setIsGeneratingPDF(false);
+      }
+    }, 400);
+  };
 
   const fetchCompetitorRecordsFromSupabase = async () => {
     setIsFetchingCompetitors(true);
@@ -685,7 +724,7 @@ export default function App() {
   const [profile, setProfile] = useState<any>(() => {
     const cached = localStorage.getItem('lbcl_auth_profile');
     return cached ? JSON.parse(cached) : {
-      full_name: "Field Operations Representative",
+      full_name: "Rumesh Anjanawardana",
       se_code: "ALL_ACCESS",
       assigned_outlet_id: "",
       role: "All Access Mode",
@@ -716,6 +755,22 @@ export default function App() {
     return cleanName.slice(0, 2).toUpperCase();
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Supabase signOut error:", err);
+    }
+    setSessionUser(null);
+    setProfile(null);
+    localStorage.removeItem('lbcl_auth_user');
+    localStorage.removeItem('lbcl_auth_profile');
+    addToast({
+      type: 'warning',
+      message: language === 'SI' ? 'පද්ධතියෙන් බැහැර විය.' : 'Session signed out safely.'
+    });
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginSeCode || !loginPassword) {
@@ -731,214 +786,96 @@ export default function App() {
       ? loginSeCode.trim() 
       : `${loginSeCode.toLowerCase().trim()}@lbcl.com`;
 
-    // Map common profiles statically as robust fallback/seeds if REST request fails.
-    const defaultProfiles: Record<string, { full_name: string; assigned_outlet_id: string; role: string; territory: string }> = {
-      'rumesh': { full_name: "Rumesh Anjanawardana", assigned_outlet_id: "RT-1092", role: "Senior Field Operations Rep", territory: "WESTERN-04 (Colombo Base)" },
-      'se-1092': { full_name: "Rumesh Anjanawardana", assigned_outlet_id: "RT-1092", role: "Senior Field Operations Rep", territory: "WESTERN-04 (Colombo Base)" },
-      'dilshan': { full_name: "Dilshan Perera", assigned_outlet_id: "RT-4482", role: "Sales Representative", territory: "WESTERN-01 (Kottawa Division)" },
-      'se-4482': { full_name: "Dilshan Perera", assigned_outlet_id: "RT-4482", role: "Sales Representative", territory: "WESTERN-01 (Kottawa Division)" },
-      'nisansala': { full_name: "Nisansala Senayake", assigned_outlet_id: "RT-9938", role: "Auditor", territory: "WESTERN-02 (Union Place Base)" },
-      'se-9938': { full_name: "Nisansala Senayake", assigned_outlet_id: "RT-9938", role: "Auditor", territory: "WESTERN-02 (Union Place Base)" },
-      'asanka': { full_name: "Asanka Rodrigo", assigned_outlet_id: "RT-2231", role: "Operations Lead", territory: "WESTERN-03 (Hyde Park Base)" },
-      'se-2231': { full_name: "Asanka Rodrigo", assigned_outlet_id: "RT-2231", role: "Operations Lead", territory: "WESTERN-03 (Hyde Park Base)" },
-    };
-
-    const inputKey = loginSeCode.toLowerCase().trim();
-    const matchedOutletFromDb = outletsList.find(o => 
-      (o.seCode || '').toLowerCase().trim() === inputKey ||
-      (o.rtCode || '').toLowerCase().trim() === inputKey
-    );
-
-    const fallbackProfile = {
-      full_name: defaultProfiles[inputKey]?.full_name || (matchedOutletFromDb 
-        ? `${matchedOutletFromDb.name.split(' - ')[0]} Rep` 
-        : (loginSeCode.charAt(0).toUpperCase() + loginSeCode.slice(1))),
-      assigned_outlet_id: defaultProfiles[inputKey]?.assigned_outlet_id || (matchedOutletFromDb ? matchedOutletFromDb.rtCode : "RT-1092"),
-      role: defaultProfiles[inputKey]?.role || "Field Representative",
-      territory: defaultProfiles[inputKey]?.territory || (matchedOutletFromDb ? `TERRITORY-${matchedOutletFromDb.rtCode}` : "WESTERN-04 (Colombo Base)"),
-      se_code: inputKey
-    };
-
     try {
-      // 1. Authenticate with Supabase Auth GoTrue API
-      // Extract main project URL from SUPABASE_URL (before /rest/v1/)
-      const authBaseUrl = SUPABASE_URL.split('/rest/v1/')[0] + '/auth/v1';
-      
-      let sessionData: any = null;
-      let profileData: any = null;
-
-      const loginRes = await fetch(`${authBaseUrl}/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: formattedEmail,
-          password: loginPassword
-        })
+      // 1. Authenticate with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: formattedEmail,
+        password: loginPassword,
       });
 
-      if (loginRes.ok) {
-        sessionData = await loginRes.json();
-      } else {
-        const errorResponse = await loginRes.json().catch(() => ({}));
-        throw new Error(errorResponse.error_description || errorResponse.message || "Invalid login credentials. Please verify your SE Code and password.");
+      if (authError || !authData.user) {
+        throw new Error(authError?.message || "Invalid login credentials. Please verify your SE Code and password.");
       }
 
-      if (sessionData && sessionData.user) {
-        const emailUser = sessionData.user.email || '';
-        
-        // Fetch up-to-date outlets list to ensure we resolve se_code correctly from real Supabase data
-        let currentOutlets = outletsList;
-        try {
-          const freshRes = await fetch(`${SUPABASE_URL}outlets?select=*&order=outlet_name.asc`, {
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-            }
-          });
-          if (freshRes.ok) {
-            const data = await freshRes.json();
-            if (Array.isArray(data) && data.length > 0) {
-              currentOutlets = data.map((o: any) => ({
-                rtCode: o.rt_code || '',
-                name: o.outlet_name || '',
-                address: o.address ? o.address.trim() : 'Colombo Base, Sri Lanka',
-                seCode: o.se_code || ''
-              }));
-              setOutletsList(currentOutlets);
-            }
-          }
-        } catch (freshErr) {
-          console.error("Error updating outlets list during authentication:", freshErr);
+      const emailUser = authData.user.email || formattedEmail;
+
+      // 2. Dynamic Fetch from 'sales_executives'
+      let fetchedName = '';
+      let fetchedSeCode = '';
+
+      try {
+        const { data: execData, error: execError } = await supabase
+          .from('sales_executives')
+          .select('name, se_code')
+          .eq('email', emailUser)
+          .maybeSingle();
+
+        if (execData) {
+          fetchedName = execData.name || '';
+          fetchedSeCode = execData.se_code || '';
         }
+      } catch (dbErr) {
+        console.error("Error querying 'sales_executives' table on login:", dbErr);
+      }
 
-        let resolvedSeCode = resolveSeCodeFromEmail(emailUser, currentOutlets);
-        let lowerSeCode = resolvedSeCode.toLowerCase();
-        let matchedOutlet: any = null;
+      const defaultSeCode = emailUser.split('@')[0].toUpperCase();
+      const resolvedSeCode = fetchedSeCode || defaultSeCode;
+      const resolvedName = fetchedName || resolvedSeCode;
 
-        // Immediately fetch data from 'outlets' table where 'se_code' matches lowerSeCode or the full email
-        try {
-          let url = `${SUPABASE_URL}outlets?se_code=eq.${lowerSeCode}&select=*`;
-          if (!emailUser.toLowerCase().endsWith('@lbcl.com') && emailUser.toLowerCase().trim() !== lowerSeCode) {
-            url = `${SUPABASE_URL}outlets?or=(se_code.eq.${lowerSeCode},se_code.eq.${emailUser.toLowerCase().trim()})&select=*`;
+      // Ensure that we cache outlets list during authentication
+      let currentOutlets = outletsList;
+      try {
+        const freshRes = await fetch(`${SUPABASE_URL}outlets?select=*&order=outlet_name.asc`, {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
           }
-
-          const outletRes = await fetch(url, {
-            method: 'GET',
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${sessionData.access_token}`
-            }
-          });
-          if (outletRes.ok) {
-            const outletsData = await outletRes.json();
-            if (Array.isArray(outletsData) && outletsData.length > 0) {
-              matchedOutlet = outletsData[0];
-              if (matchedOutlet.se_code) {
-                resolvedSeCode = matchedOutlet.se_code;
-                lowerSeCode = resolvedSeCode.toLowerCase();
-              }
-            }
-          }
-        } catch (outletErr) {
-          console.error("Error fetching matching outlet from Supabase on login:", outletErr);
-        }
-
-        // Local fallback lookup in newly loaded outlets array using the robust matcher
-        if (!matchedOutlet && currentOutlets.length > 0) {
-          const localMatch = currentOutlets.find(o => 
-            isMatchingSeCode(lowerSeCode, o.seCode || '', o.rtCode || '')
-          );
-          if (localMatch) {
-            matchedOutlet = {
-              rt_code: localMatch.rtCode,
-              outlet_name: localMatch.name,
-              address: localMatch.address,
-              se_code: localMatch.seCode
-            };
-          }
-        }
-
-        const userId = sessionData.user.id;
-        try {
-          const profileRes = await fetch(`${SUPABASE_URL}profiles?id=eq.${userId}`, {
-            method: 'GET',
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${sessionData.access_token}`
-            }
-          });
-
-          if (profileRes.ok) {
-            const profilesList = await profileRes.json();
-            if (Array.isArray(profilesList) && profilesList.length > 0) {
-              profileData = { ...profilesList[0] };
-            }
-          }
-
-          if (!profileData) {
-            const upsertRes = await fetch(`${SUPABASE_URL}profiles`, {
-              method: 'POST',
-              headers: {
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${sessionData.access_token}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'resolution=merge-duplicates'
-              },
-              body: JSON.stringify({
-                id: userId,
-                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : resolvedSeCode,
-                assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
-                role: "Field Operations Representative",
-                territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
-                se_code: resolvedSeCode
-              })
-            });
-
-            if (upsertRes.ok) {
-              profileData = {
-                id: userId,
-                full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : resolvedSeCode,
-                assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
-                role: "Field Operations Representative",
-                territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
-                se_code: resolvedSeCode
-              };
-            }
-          }
-        } catch (profileErr) {
-          console.error("Error fetching/upserting profile detail:", profileErr);
-        }
-
-        // Keep synced or construct fallback
-        if (!profileData) {
-          profileData = {
-            id: userId,
-            full_name: matchedOutlet ? `${matchedOutlet.outlet_name.split(' - ')[0]} Rep` : resolvedSeCode,
-            assigned_outlet_id: matchedOutlet ? matchedOutlet.rt_code : "RT-1092",
-            role: "Field Operations Representative",
-            territory: matchedOutlet ? `TERRITORY-${matchedOutlet.rt_code}` : "WESTERN-04 (Colombo Base)",
-            se_code: resolvedSeCode
-          };
-        } else {
-          profileData.se_code = resolvedSeCode;
-          if (matchedOutlet) {
-            profileData.assigned_outlet_id = matchedOutlet.rt_code;
-          }
-        }
-
-        setSessionUser(sessionData.user);
-        setProfile(profileData);
-        localStorage.setItem('lbcl_auth_user', JSON.stringify(sessionData.user));
-        localStorage.setItem('lbcl_auth_profile', JSON.stringify(profileData));
-
-        addToast({
-          type: 'success',
-          message: `Access granted! Welcome, ${profileData.full_name || resolvedSeCode}.`
         });
+        if (freshRes.ok) {
+          const data = await freshRes.json();
+          if (Array.isArray(data) && data.length > 0) {
+            currentOutlets = data.map((o: any) => ({
+              rtCode: o.rt_code || '',
+              name: o.outlet_name || '',
+              address: o.address ? o.address.trim() : 'Colombo Base, Sri Lanka',
+              seCode: o.se_code || ''
+            }));
+            setOutletsList(currentOutlets);
+          }
+        }
+      } catch (freshErr) {
+        console.error("Error updating outlets list during authentication:", freshErr);
       }
+
+      // Construct dynamic profile with retrieved DB values
+      const profileData: any = {
+        id: authData.user.id,
+        full_name: resolvedName,
+        se_code: resolvedSeCode,
+        assigned_outlet_id: "RT-1092",
+        role: "Field Operations Representative",
+        territory: "WESTERN-04 (Colombo Base)"
+      };
+
+      const lowerSeCode = resolvedSeCode.toLowerCase();
+      const matchedOutlet = currentOutlets.find(o => 
+        (o.seCode || '').toLowerCase().trim() === lowerSeCode
+      );
+      if (matchedOutlet) {
+        profileData.assigned_outlet_id = matchedOutlet.rtCode;
+        profileData.territory = `TERRITORY-${matchedOutlet.rtCode}`;
+      }
+
+      setSessionUser(authData.user);
+      setProfile(profileData);
+      localStorage.setItem('lbcl_auth_user', JSON.stringify(authData.user));
+      localStorage.setItem('lbcl_auth_profile', JSON.stringify(profileData));
+
+      addToast({
+        type: 'success',
+        message: `Access granted! Welcome, ${profileData.full_name || resolvedSeCode}.`
+      });
+
     } catch (err: any) {
       setLoginError(err.message || "Authentication failed. Clear your credentials & try again.");
     } finally {
@@ -947,7 +884,7 @@ export default function App() {
   };
 
   // Dynamic Greeting based on real-time system clock
-  const [greeting, setGreeting] = useState<string>('Good Day, Guest');
+  const [greeting, setGreeting] = useState<string>('Good Day');
   const [currentDateStr, setCurrentDateStr] = useState<string>('Tuesday, Oct 24');
 
   useEffect(() => {
@@ -963,12 +900,7 @@ export default function App() {
         phrase = 'Good Evening';
       }
       
-      const displayName = profile 
-        ? (profile.se_code 
-            ? (profile.se_code.includes('@') ? profile.se_code.split('@')[0].toUpperCase() : profile.se_code.toUpperCase()) 
-            : profile.full_name) 
-        : 'Guest';
-      const greetText = `${phrase}, ${displayName}`;
+      const greetText = phrase;
       setGreeting(greetText);
 
       // Format date
@@ -1303,57 +1235,95 @@ export default function App() {
     const fromEmail = (import.meta as any).env.VITE_RESEND_FROM_EMAIL || 'onboarding@resend.dev';
     const toEmail = (import.meta as any).env.VITE_RESEND_TO_EMAIL || 'rumeshanjanard@gmail.com';
 
+    // Helper function for safe text extraction
+    const cleanStr = (val: string) => (val || '').trim();
+    // Helper function to escape text for HTML attribute inline JavaScript copy script
+    const escJs = (val: string) => cleanStr(val).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+
+    // Specified list of table parameters in the EXACT sequence requested
+    const fields = [
+      { label: 'RT Code:', value: complaintData.rtCode, fallback: '—' },
+      { label: 'Outlet Name:', value: complaintData.outletName, fallback: '—' },
+      { label: 'Location:', value: complaintData.location, fallback: '—' },
+      { label: 'Issue Type:', value: complaintData.issueType, fallback: '—' },
+      { label: 'Capacity:', value: complaintData.capacity, fallback: '—' },
+      { label: 'Contact Person:', value: complaintData.contactPerson, fallback: '—' },
+      { label: 'Contact Number:', value: complaintData.contactNumber, fallback: '—' },
+    ];
+
+    const fullTextCopyData = fields.map(f => `${f.label} ${cleanStr(f.value) || f.fallback}`).join('\n');
+    const escapedFullText = escJs(fullTextCopyData);
+
+    const tableRowsHtml = fields.map((f, idx) => {
+      const displayVal = cleanStr(f.value) || f.fallback;
+      const isLast = idx === fields.length - 1;
+      const borderStyle = isLast ? '' : 'border-bottom: 1px solid #e2e8f0;';
+      
+      // Fine-grained typography/colors to blend beautifully in the premium light slate layout
+      let valueColor = '#0f172a';
+      let fontStyle = '';
+      if (f.label === 'RT Code:') {
+        valueColor = '#0284c7';
+        fontStyle = 'font-family: monospace, Courier, monospace; letter-spacing: 0.05em; font-weight: 700;';
+      } else if (f.label === 'Issue Type:') {
+        valueColor = '#e11d48'; // Vivid rose for issue types
+      } else if (f.label === 'Contact Number:') {
+        valueColor = '#0284c7';
+      }
+
+      return `
+        <tr>
+          <td style="padding: 14px 16px; color: #475569; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; width: 35%; vertical-align: middle; ${borderStyle}">${f.label}</td>
+          <td style="padding: 14px 16px; color: ${valueColor}; font-weight: 700; text-align: left; font-size: 14px; line-height: 1.4; vertical-align: middle; ${borderStyle}; ${fontStyle}">${displayVal}</td>
+        </tr>
+      `;
+    }).join('');
+
     const htmlBody = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-        <div style="text-align: center; margin-bottom: 24px;">
-          <span style="background-color: #f0f9ff; color: #0284c7; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; padding: 6px 12px; border-radius: 9999px;">
-            LBCL Field Service Alert
-          </span>
-          <h2 style="color: #0f172a; font-size: 22px; font-weight: 800; margin-top: 12px; margin-bottom: 4px; letter-spacing: -0.025em;">
-            Cooler Complaint Report
-          </h2>
-          <p style="color: #64748b; font-size: 13px; margin: 0;">
-            A high-priority maintenance request was generated from the field hub.
-          </p>
-        </div>
+      <div style="background-color: #f1f5f9; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; min-height: 100%;">
+        <div style="max-width: 600px; width: 100%; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+          <!-- Header block with soft corporate identity -->
+          <div style="padding: 32px 24px 24px; text-align: center; border-bottom: 1px solid #f1f5f9; background-color: #ffffff;">
+            <span style="background-color: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; padding: 6px 16px; border-radius: 9999px; display: inline-block; margin-bottom: 16px;">
+              LBCL Field Service Alert
+            </span>
+            <h2 style="color: #0f172a; font-size: 22px; font-weight: 800; margin: 0 0 6px 0; letter-spacing: -0.025em; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+              Cooler Complaint
+            </h2>
+            <p style="color: #64748b; font-size: 13px; margin: 0; line-height: 1.5;">
+              A high-priority maintenance request was generated from the field hub.
+            </p>
+          </div>
 
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; width: 35%;">RT Code</td>
-              <td style="padding: 10px 0; color: #0f172a; font-weight: 700; font-family: monospace; border-bottom: 1px solid #e2e8f0;">${complaintData.rtCode}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Outlet Name</td>
-              <td style="padding: 10px 0; color: #0f172a; font-weight: 700; border-bottom: 1px solid #e2e8f0;">${complaintData.outletName}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Location</td>
-              <td style="padding: 10px 0; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${complaintData.location}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Issue Type</td>
-              <td style="padding: 10px 0; color: #ef4444; font-weight: 700; border-bottom: 1px solid #e2e8f0;">⚠️ ${complaintData.issueType}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Capacity</td>
-              <td style="padding: 10px 0; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${complaintData.capacity}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0;">Contact Person</td>
-              <td style="padding: 10px 0; color: #0f172a; font-weight: 600; border-bottom: 1px solid #e2e8f0;">${complaintData.contactPerson}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #64748b; font-weight: 600;">Contact Number</td>
-              <td style="padding: 10px 0; color: #0284c7; font-weight: 700;">${complaintData.contactNumber}</td>
-            </tr>
-          </table>
-        </div>
+          <!-- Structured key-value grid with light table colors -->
+          <div style="padding: 20px; background-color: #ffffff;">
+            <table style="width: 100%; border-collapse: collapse; box-sizing: border-box; background-color: #ffffff;" cellpadding="0" cellspacing="0">
+              ${tableRowsHtml}
+            </table>
+          </div>
 
-        <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center;">
-          <p style="color: #94a3b8; font-size: 11px; margin: 0; line-height: 1.5;">
-            This dispatch report was generated automatically via the <strong>LBCL Field Operations Hub</strong>.
-          </p>
+          <!-- Global prominent "Copy Full Complaint Details" call to action with robust double-click fallback block -->
+          <div style="padding: 0 20px 24px 20px; text-align: center; background-color: #ffffff;">
+            <button 
+              onclick="try { navigator.clipboard.writeText('${escapedFullText}'); } catch(e) {}" 
+              style="display: block; width: 100%; box-sizing: border-box; background-color: #0284c7; border: 1px solid #0284c7; color: #ffffff; cursor: pointer; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; text-decoration: none; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; transition: background-color 0.15s; outline: none; margin-bottom: 12px;"
+              onmouseover="this.style.backgroundColor='#0369a1';"
+              onmouseout="this.style.backgroundColor='#0284c7';"
+            >
+              📋 Copy Full Complaint Details
+            </button>
+            <div style="border: 1px dashed #cbd5e1; background-color: #f8fafc; border-radius: 6px; padding: 10px; text-align: left; font-family: monospace, Courier, monospace; font-size: 11px; color: #475569;" title="Double click block below to copy all text">
+              <span style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;">📋 Double-click below to copy all parameters:</span>
+              <pre style="margin: 0; white-space: pre-wrap; font-family: inherit; font-weight: 650; line-height: 1.4;">${fullTextCopyData}</pre>
+            </div>
+          </div>
+
+          <!-- Professional footer -->
+          <div style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 24px; text-align: center;">
+            <p style="color: #64748b; font-size: 11px; margin: 0; line-height: 1.5; font-weight: 500;">
+              This dispatch report was generated automatically via the <strong>LBCL Field Operations Hub</strong>.
+            </p>
+          </div>
         </div>
       </div>
     `;
@@ -1366,8 +1336,8 @@ export default function App() {
         },
         body: JSON.stringify({
           to: toEmail,
-          from: fromEmail,
-          subject: `[Cooler Alert] New Complaint Filed - ${complaintData.outletName}`,
+          from: `New Cooler Complaint <${fromEmail}>`,
+          subject: `Cooler Complaint | ${complaintData.outletName} | ${complaintData.rtCode}`,
           html: htmlBody
         })
       });
@@ -1521,6 +1491,17 @@ export default function App() {
     setCoolDeskSuccessRef('');
   };
 
+  // Automatically redirect to main Home Dashboard after exactly 1 second when coolDeskSuccess is triggered
+  useEffect(() => {
+    if (coolDeskSuccess) {
+      const timer = setTimeout(() => {
+        resetCoolDeskForm();
+        setActiveSubPage(null);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [coolDeskSuccess]);
+
   // Dynamic filter to compute and fetch ONLY the user's assigned own outlets (from Supabase 'outlets' table using se_code or rt_code matching)
   const filteredOutletsForDashboard = useMemo(() => {
     return outletsList;
@@ -1645,13 +1626,13 @@ export default function App() {
             {/* Input SE Code */}
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-left">
-                Outlet (SE Code)
+                SE Code or Email
               </label>
               <div className="relative flex items-center shadow-xs">
                 <Store className="absolute left-3.5 w-4 h-4 text-slate-400" />
                 <input 
                   type="text"
-                  placeholder="E.g., rumesh or se-1092"
+                  placeholder="E.g., chilsr01 or rumesh"
                   value={loginSeCode}
                   onChange={(e) => setLoginSeCode(e.target.value)}
                   className="w-full bg-slate-50/50 border border-slate-200 focus:bg-white focus:shadow-md focus:border-sky-500 focus:outline-hidden rounded-xl py-3.5 pl-10 pr-4 text-sm font-medium transition-all"
@@ -1790,7 +1771,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                 </div>
               </div>
             </header>
@@ -1848,26 +1829,9 @@ export default function App() {
                               A cooler complaint ticket has been generated and dispatched to the LBCL service hub.
                             </p>
 
-                            <div className="mt-6 p-4 bg-slate-50 border border-slate-100 rounded-2xl w-full text-center">
-                              <span className="text-xs text-slate-400 block font-semibold uppercase tracking-wider">Reference Code</span>
-                              <span className="text-lg font-bold text-slate-700 font-mono select-all mt-1 block tracking-wider bg-slate-100/50 py-1.5 rounded-lg border border-slate-100">
-                                {coolDeskSuccessRef}
-                              </span>
-                            </div>
-
-                            <button 
-                              onClick={resetCoolDeskForm}
-                              className="mt-8 w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 hover:shadow-lg hover:shadow-sky-500/10 active:scale-95 text-white font-bold py-3.5 px-4 rounded-2xl transition-all shadow-md cursor-pointer"
-                            >
-                              File Another Complaint
-                            </button>
-                            
-                            <button 
-                              onClick={() => setActiveSubPage(null)}
-                              className="mt-3 text-sm text-slate-500 hover:text-slate-700 font-medium cursor-pointer"
-                            >
-                              Return to Dashboard
-                            </button>
+                            <p className="text-xs text-slate-400 mt-6 animate-pulse">
+                              Redirecting to Home Dashboard...
+                            </p>
                           </div>
                         </div>
                       ) : (
@@ -2804,14 +2768,38 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* Export to Excel / CSV */}
-                              <button
-                                onClick={exportCompetitorDataToCSV}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 w-full lg:w-auto"
-                              >
-                                <FileSpreadsheet className="w-4 h-4" />
-                                <span>{language === 'SI' ? 'Excel ගොනුව' : 'Export to Excel'}</span>
-                              </button>
+                              {/* Export buttons panel wrapper */}
+                              <div className="flex flex-col sm:flex-row items-center gap-2.5 shrink-0 w-full lg:w-auto">
+                                {/* Export to Excel / CSV */}
+                                <button
+                                  onClick={exportCompetitorDataToCSV}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 w-full sm:w-auto"
+                                >
+                                  <FileSpreadsheet className="w-4 h-4" />
+                                  <span>{language === 'SI' ? 'Excel ගොනුව' : 'Export to Excel'}</span>
+                                </button>
+
+                                {/* Export to PDF (Direct client-side generation) */}
+                                <button
+                                  onClick={handleExportListToPDF}
+                                  disabled={isGeneratingPDF}
+                                  className={`bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 w-full sm:w-auto ${
+                                    isGeneratingPDF ? 'opacity-70 cursor-not-allowed' : ''
+                                  }`}
+                                >
+                                  {isGeneratingPDF ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                      <span>{language === 'SI' ? 'සකසමින්...' : 'Generating PDF...'}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FileText className="w-4 h-4" />
+                                      <span>{language === 'SI' ? 'PDF ගොනුව' : 'Export to PDF'}</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             </div>
 
                             {/* Active filter description */}
@@ -3452,24 +3440,47 @@ export default function App() {
                         <div className="px-5 py-4 space-y-5 animate-in fade-in duration-200 text-left font-sans">
                           
                           {/* Back Header */}
-                          <div className="flex items-center gap-3 border-b border-slate-150 pb-3">
-                            <button
-                              onClick={() => {
-                                setSelectedCompetitorRecord(null);
-                                setCompetitorView('list');
-                              }}
-                              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-650 cursor-pointer transition-colors border-none"
-                            >
-                              <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
-                            </button>
-                            <div>
-                              <span className="text-[10px] font-sans font-bold text-rose-500 uppercase tracking-widest block font-mono">
-                                Audit Intelligence Log
-                              </span>
-                              <h2 className="text-lg font-extrabold text-slate-900 font-sans">
-                                Field Tracking Detail
-                              </h2>
+                          <div className="flex items-center justify-between border-b border-slate-150 pb-3">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => {
+                                  setSelectedCompetitorRecord(null);
+                                  setCompetitorView('list');
+                                }}
+                                className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-650 cursor-pointer transition-colors border-none"
+                              >
+                                <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                              </button>
+                              <div>
+                                <span className="text-[10px] font-sans font-bold text-rose-500 uppercase tracking-widest block font-mono">
+                                  Audit Intelligence Log
+                                </span>
+                                <h2 className="text-lg font-extrabold text-slate-900 font-sans">
+                                  Field Tracking Detail
+                                </h2>
+                              </div>
                             </div>
+
+                            {/* Detailed single-record PDF export */}
+                            <button
+                              onClick={() => handleExportSingleRecordToPDF(selectedCompetitorRecord)}
+                              disabled={isGeneratingPDF}
+                              className={`bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold py-2 px-3 sm:px-4 rounded-xl flex items-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 ${
+                                isGeneratingPDF ? 'cursor-not-allowed opacity-70' : ''
+                              }`}
+                            >
+                              {isGeneratingPDF ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <span>{language === 'SI' ? 'සකසමින්...' : 'Generating...'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="w-4 h-4" />
+                                  <span>{language === 'SI' ? 'PDF ගොනුව' : 'Export PDF'}</span>
+                                </>
+                              )}
+                            </button>
                           </div>
 
                           {/* Relational Outlet Information Card */}
@@ -3752,6 +3763,17 @@ export default function App() {
                               </button>
                             </div>
                           </div>
+                        </div>
+
+                        {/* SECTION 1.5: SESSION LOGOUT */}
+                        <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-205">
+                          <button
+                            onClick={handleLogout}
+                            className="w-full py-3 bg-rose-50 hover:bg-rose-100/75 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <LogOut className="w-4 h-4 shrink-0" />
+                            <span>{language === 'SI' ? 'පද්ධතියෙන් පිටවෙන්න (Log Out)' : 'Sign Out and Log Out'}</span>
+                          </button>
                         </div>
 
 

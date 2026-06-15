@@ -39,21 +39,52 @@ export default async function handler(req: any, res: any) {
 
     console.log(`[Resend] Dispatching email notification to: ${toEmail} from: ${fromEmail}`);
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: Array.isArray(toEmail) ? toEmail : [toEmail],
-        subject: subject || '[Cooler Alert] Urgent Maintenance Request',
-        html: html
-      })
-    });
+    const sendEmailWithSender = async (sender: string) => {
+      return await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: sender,
+          to: Array.isArray(toEmail) ? toEmail : [toEmail],
+          subject: subject || '[Cooler Alert] Urgent Maintenance Request',
+          html: html
+        })
+      });
+    };
 
-    const data = await response.json().catch(() => ({}));
+    let response = await sendEmailWithSender(fromEmail);
+    let data = await response.json().catch(() => ({}));
+
+    // Detect unverified domain errors or validation errors from Resend
+    const isValidationError = !response.ok && (
+      (data.name === 'validation_error') || 
+      (data.message && data.message.toLowerCase().includes('not verified')) ||
+      (data.message && data.message.toLowerCase().includes('domain'))
+    );
+
+    if (isValidationError && fromEmail !== 'onboarding@resend.dev') {
+      console.warn(`[Resend Fallback] Original sender "${fromEmail}" is not verified. Retrying auto-fallback with onboarding@resend.dev...`);
+      // Parse a clean label name from the original sender
+      let senderDisplayName = '';
+      if (fromEmail.includes('<')) {
+        senderDisplayName = fromEmail.split('<')[0].trim();
+      } else {
+        const localPart = fromEmail.split('@')[0] || '';
+        senderDisplayName = localPart.charAt(0).toUpperCase() + localPart.slice(1);
+      }
+
+      // Re-format to a safe sandbox sender e.g. "LBCL Operations <onboarding@resend.dev>"
+      const fallbackSender = senderDisplayName 
+        ? `${senderDisplayName} <onboarding@resend.dev>` 
+        : 'onboarding@resend.dev';
+
+      console.log(`[Resend Fallback] Retry with fallback sender: ${fallbackSender}`);
+      response = await sendEmailWithSender(fallbackSender);
+      data = await response.json().catch(() => ({}));
+    }
 
     if (!response.ok) {
       console.error('[Resend Error Details]', data);
