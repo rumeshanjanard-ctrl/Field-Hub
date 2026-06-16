@@ -1273,8 +1273,9 @@ export default function App() {
     const fullTextCopyData = fields.map(f => `${f.label} ${cleanStr(f.value) || f.fallback}`).join('\n');
     const escapedFullText = escJs(fullTextCopyData);
 
-    const mailtoSubject = encodeURIComponent(`Cooler Complaint - ${cleanStr(complaintData.outletName)} | ${cleanStr(complaintData.rtCode)}`);
-    const mailtoBody = encodeURIComponent([
+    const encodedOutletName = encodeURIComponent(cleanStr(complaintData.outletName));
+    const encodedRtCode = encodeURIComponent(cleanStr(complaintData.rtCode));
+    const bodyRows = [
       `RT Code: ${cleanStr(complaintData.rtCode) || '—'}`,
       `Outlet Name: ${cleanStr(complaintData.outletName) || '—'}`,
       `Location: ${cleanStr(complaintData.location) || '—'}`,
@@ -1282,8 +1283,10 @@ export default function App() {
       `Capacity: ${cleanStr(complaintData.capacity) || '—'}`,
       `Contact Person: ${cleanStr(complaintData.contactPerson) || '—'}`,
       `Contact Number: ${cleanStr(complaintData.contactNumber) || '—'}`
-    ].join('\n'));
-    const mailtoUri = `mailto:?subject=${mailtoSubject}&body=${mailtoBody}`;
+    ];
+    const encodedBodyText = encodeURIComponent(bodyRows.join('\n'));
+    // Construct the live URL for Outlook Web deep linking
+    const outlookComposeUrl = `https://outlook.office.com/mail/deeplink/compose?subject=Cooler%20Complaint%20-%20${encodedOutletName}%20%7C%20${encodedRtCode}&body=${encodedBodyText}`;
 
     const tableRowsHtml = fields.map((f, idx) => {
       const displayVal = cleanStr(f.value) || f.fallback;
@@ -1336,7 +1339,7 @@ export default function App() {
           <!-- Native Mailto Action Link -->
           <div style="padding: 0 20px 24px 20px; text-align: center; background-color: #ffffff;">
             <a 
-              href="${mailtoUri}"
+              href="${outlookComposeUrl}"
               style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: bold; text-decoration: none; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
             >
               📋 Open & Populate in Outlook
