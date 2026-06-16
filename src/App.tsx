@@ -10,7 +10,7 @@ import loginWallArtBg from './assets/images/login_wall_art_1781191937515.jpg';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ClipboardCheck, AlertTriangle, Store, TrendingUp, Box, Map, Users,
-  ThermometerSnowflake, Bell, ArrowRight, ChevronRight, Search, 
+  ThermometerSnowflake, Bell, ArrowRight, ChevronRight, Search, ChevronDown, 
   MapPin, LogOut, Loader2, Check, Send, Sparkles, Phone, User, Info, 
   Plus, X, CheckCircle, RefreshCw, SlidersHorizontal, ChevronLeft,
   DollarSign, Activity, Eye, Play, Star, Circle, Landmark, Target, Lock,
@@ -1129,6 +1129,25 @@ export default function App() {
   const [cooldeskSearchQuery, setCooldeskSearchQuery] = useState('');
   const [isCoolDeskDropdownOpen, setIsCoolDeskDropdownOpen] = useState(false);
   const [isCoolDeskSubmitting, setIsCoolDeskSubmitting] = useState(false);
+  const [isIssueDropdownOpen, setIsIssueDropdownOpen] = useState(false);
+
+  const toggleIssueType = (typeName: string) => {
+    const currentSelected = cooldeskForm.issueType 
+      ? cooldeskForm.issueType.split(', ').map(s => s.trim()).filter(Boolean)
+      : [];
+    
+    let updated: string[];
+    if (currentSelected.includes(typeName)) {
+      updated = currentSelected.filter(item => item !== typeName);
+    } else {
+      updated = [...currentSelected, typeName];
+    }
+    
+    setCooldeskForm(prev => ({
+      ...prev,
+      issueType: updated.join(', ')
+    }));
+  };
   const [coolDeskSuccess, setCoolDeskSuccess] = useState(false);
   const [coolDeskSuccessRef, setCoolDeskSuccessRef] = useState('');
 
@@ -1935,25 +1954,87 @@ export default function App() {
                             </div>
 
                             {/* Issue Type */}
-                            <div className="col-span-1">
-                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                            <div className="col-span-1 relative">
+                              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1 col-span-1">
                                 Issue Type <span className="text-rose-500">*</span>
                                 {isLoadingIssueTypes && (
                                   <span className="text-[10px] text-sky-500 font-medium font-sans animate-pulse ml-1">(loading...)</span>
                                 )}
                               </label>
-                              <select 
-                                value={cooldeskForm.issueType}
-                                onChange={(e) => setCooldeskForm(prev => ({ ...prev, issueType: e.target.value }))}
-                                className="w-full bg-slate-50/20 border border-slate-200 hover:bg-white focus:bg-white rounded-xl py-3 px-3.5 text-sm focus:border-sky-500 focus:outline-hidden ring-offset-2 focus:ring-2 focus:ring-sky-100 transition-all font-medium text-slate-700 cursor-pointer"
+                              
+                              <button
+                                type="button"
+                                onClick={() => setIsIssueDropdownOpen(prev => !prev)}
+                                className="w-full bg-slate-50/20 border border-slate-200 hover:bg-white active:bg-slate-50 focus:bg-white rounded-xl py-3 px-3.5 text-sm focus:border-sky-500 focus:outline-hidden ring-offset-2 focus:ring-2 focus:ring-sky-100 transition-all font-medium text-slate-700 cursor-pointer flex items-center justify-between text-left min-h-[46px]"
                               >
-                                <option value="">-- Choose issue type --</option>
-                                {issueTypesList.map((item) => (
-                                  <option key={item.id} value={item.type_name}>
-                                    {item.type_name}
-                                  </option>
-                                ))}
-                              </select>
+                                <div className="flex flex-wrap gap-1.5 items-center mr-2 max-w-[90%]">
+                                  {cooldeskForm.issueType ? (
+                                    cooldeskForm.issueType.split(', ').map((selectedItem, idx) => (
+                                      <span 
+                                        key={idx} 
+                                        className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-101 px-2 py-0.5 rounded-lg text-xs font-semibold"
+                                      >
+                                        {selectedItem}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-slate-400 font-normal">-- Choose issue types --</span>
+                                  )}
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${isIssueDropdownOpen ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {isIssueDropdownOpen && (
+                                <>
+                                  <div 
+                                    className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                                    onClick={() => setIsIssueDropdownOpen(false)}
+                                  />
+                                  <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-slate-100 rounded-xl shadow-lg max-h-64 overflow-y-auto divide-y divide-slate-50 hover:shadow-xl transition-all">
+                                    <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2.5">
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1 font-sans">
+                                        Select Multiple Issues
+                                      </span>
+                                      {cooldeskForm.issueType && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setCooldeskForm(prev => ({ ...prev, issueType: '' }))}
+                                          className="text-[10px] bg-slate-200/60 text-slate-600 hover:bg-rose-50 hover:text-rose-500 px-2 py-1 rounded-md font-bold transition-all relative z-50"
+                                        >
+                                          Clear All
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="p-1.5 space-y-0.5">
+                                      {issueTypesList.map((item) => {
+                                        const isChecked = cooldeskForm.issueType 
+                                          ? cooldeskForm.issueType.split(', ').map(s => s.trim()).includes(item.type_name) 
+                                          : false;
+                                        return (
+                                          <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => toggleIssueType(item.type_name)}
+                                            className={`w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-3 relative z-50 ${
+                                              isChecked ? 'bg-sky-50/30' : ''
+                                            }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={() => {}} 
+                                              className="w-4 h-4 rounded text-sky-600 border-slate-300 focus:ring-sky-500 cursor-pointer pointer-events-none"
+                                            />
+                                            <span className={`text-xs font-medium ${isChecked ? 'text-sky-800 font-bold' : 'text-slate-600'}`}>
+                                              {item.type_name}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
                             </div>
 
                             {/* Cooler Capacity */}
