@@ -1273,6 +1273,18 @@ export default function App() {
     const fullTextCopyData = fields.map(f => `${f.label} ${cleanStr(f.value) || f.fallback}`).join('\n');
     const escapedFullText = escJs(fullTextCopyData);
 
+    const mailtoSubject = encodeURIComponent(`Cooler Complaint - ${cleanStr(complaintData.outletName)} | ${cleanStr(complaintData.rtCode)}`);
+    const mailtoBody = encodeURIComponent([
+      `RT Code: ${cleanStr(complaintData.rtCode) || '—'}`,
+      `Outlet Name: ${cleanStr(complaintData.outletName) || '—'}`,
+      `Location: ${cleanStr(complaintData.location) || '—'}`,
+      `Issue Type: ${cleanStr(complaintData.issueType) || '—'}`,
+      `Capacity: ${cleanStr(complaintData.capacity) || '—'}`,
+      `Contact Person: ${cleanStr(complaintData.contactPerson) || '—'}`,
+      `Contact Number: ${cleanStr(complaintData.contactNumber) || '—'}`
+    ].join('\n'));
+    const mailtoUri = `mailto:?subject=${mailtoSubject}&body=${mailtoBody}`;
+
     const tableRowsHtml = fields.map((f, idx) => {
       const displayVal = cleanStr(f.value) || f.fallback;
       const isLast = idx === fields.length - 1;
@@ -1319,6 +1331,16 @@ export default function App() {
             <table style="width: 100%; border-collapse: collapse; box-sizing: border-box; background-color: #ffffff;" cellpadding="0" cellspacing="0">
               ${tableRowsHtml}
             </table>
+          </div>
+
+          <!-- Native Mailto Action Link -->
+          <div style="padding: 0 20px 24px 20px; text-align: center; background-color: #ffffff;">
+            <a 
+              href="${mailtoUri}"
+              style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: bold; text-decoration: none; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+            >
+              📋 Open & Populate in Outlook
+            </a>
           </div>
 
           <!-- Global prominent "Copy Full Complaint Details" call to action with robust double-click fallback block -->
