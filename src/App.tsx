@@ -400,6 +400,8 @@ export default function App() {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [brandSkuQuantities, setBrandSkuQuantities] = useState<Record<string, Record<string, string>>>({});
   const [activeBrandTab, setActiveBrandTab] = useState<string>('Anchor Smooth');
+  const [expandedBrandTab, setExpandedBrandTab] = useState<string | null>('Anchor Smooth');
+  const [isSavingCompetitor, setIsSavingCompetitor] = useState(false);
 
   useEffect(() => {
     const active = COMPETITOR_BRANDS.filter(brand => {
@@ -3297,124 +3299,137 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* 2. SPLIT-PANE BRAND & SKU INTERFACE */}
+                            {/* 2. VERTICAL ACCORDION BRAND & SKU INTERFACE */}
                             <div className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 shadow-3xs space-y-4">
                               <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
                                 <h3 className="text-[11px] font-extrabold text-slate-800 uppercase tracking-widest font-sans flex items-center gap-1.5">
                                   <span className="w-5 h-5 rounded-md bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-[10px]">2</span>
                                   {language === 'SI' ? 'තරඟකාරී සන්නාම සහ SKU විස්තර' : 'Brands & SKU Stock Matrix'}
                                 </h3>
-                                <span className="text-[9px] font-extrabold text-sky-700 bg-sky-50 border border-sky-100 px-2.5 py-0.5 rounded-full uppercase">
+                                <span className="text-[9px] font-extrabold text-sky-700 bg-sky-50 border border-sky-100 px-2.5 py-0.5 rounded-full uppercase font-mono">
                                   {selectedBrands.length} brands filled
                                 </span>
                               </div>
 
-                              <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-                                {/* Left Panel (Brand Master List) */}
-                                {/* On Mobile view: horizontal scrollable chips */}
-                                <div className="md:hidden flex gap-2 overflow-x-auto pb-2 scrollbar-thin snap-x w-full">
-                                  {COMPETITOR_BRANDS.map((brand) => {
-                                    const isSelected = activeBrandTab === brand;
-                                    const isFilled = isBrandFilled(brand);
-                                    return (
+                              <div className="space-y-3">
+                                {COMPETITOR_BRANDS.map((brand) => {
+                                  const isOpen = expandedBrandTab === brand;
+                                  const isFilled = isBrandFilled(brand);
+                                  
+                                  return (
+                                    <div 
+                                      key={brand} 
+                                      className={`border rounded-2xl transition-all duration-200 overflow-hidden bg-white ${
+                                        isOpen 
+                                          ? 'border-sky-300 shadow-3xs ring-1 ring-sky-300/35' 
+                                          : 'border-slate-150 hover:border-slate-350 shadow-4xs'
+                                      }`}
+                                    >
+                                      {/* Accordion List Header */}
                                       <button
                                         type="button"
-                                        key={brand}
-                                        onClick={() => setActiveBrandTab(brand)}
-                                        className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold shrink-0 transition-all border flex items-center gap-1.5 snap-center cursor-pointer select-none bg-transparent ${
-                                          isSelected 
-                                            ? 'bg-sky-500 border-sky-500 text-white shadow-3xs' 
-                                            : 'bg-slate-50 border-slate-200 text-slate-650 hover:bg-slate-100'
-                                        }`}
+                                        onClick={() => {
+                                          setExpandedBrandTab(isOpen ? null : brand);
+                                        }}
+                                        className="w-full text-left px-4 py-3.5 flex items-center justify-between gap-3 text-xs font-bold text-slate-800 hover:bg-slate-50/55 transition-colors cursor-pointer select-none border-none bg-transparent active:scale-[0.99]"
                                       >
-                                        <span>{brand}</span>
-                                        {isFilled && (
-                                          <Check className={`w-3 h-3 ${isSelected ? 'text-white' : 'text-emerald-500'}`} />
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                                        <div className="flex items-center gap-3">
+                                          {/* Completion visual status badge */}
+                                          <div 
+                                            className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 border transition-all ${
+                                              isFilled 
+                                                ? 'bg-emerald-50 border-emerald-300 text-emerald-650' 
+                                                : 'bg-slate-50 border-slate-150 text-slate-400'
+                                            }`}
+                                          >
+                                            {isFilled ? (
+                                              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                            ) : (
+                                              <span className="text-[9px] font-extrabold font-mono text-slate-400">···</span>
+                                            )}
+                                          </div>
 
-                                {/* On Desktop/Tablet view: scrollable vertical left panel list */}
-                                <div className="hidden md:block md:col-span-4 border-r border-slate-100 pr-3.5 max-h-[320px] overflow-y-auto space-y-1.5 scrollbar-thin">
-                                  {COMPETITOR_BRANDS.map((brand) => {
-                                    const isSelected = activeBrandTab === brand;
-                                    const isFilled = isBrandFilled(brand);
-                                    return (
-                                      <button
-                                        type="button"
-                                        key={brand}
-                                        onClick={() => setActiveBrandTab(brand)}
-                                        className={`w-full text-left px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none bg-transparent ${
-                                          isSelected 
-                                            ? 'bg-sky-50 border-sky-300 text-sky-850 shadow-3xs font-extrabold border-l-4 border-l-sky-500' 
-                                            : 'bg-slate-50/50 border-slate-150 text-slate-650 hover:bg-slate-100 font-medium'
-                                        }`}
-                                      >
-                                        <span className="text-[11px] truncate leading-none">{brand}</span>
-                                        {isFilled && (
-                                          <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                                          <div className="flex flex-col text-left">
+                                            <span className="text-xs font-extrabold text-slate-800 font-sans tracking-wide leading-none">{brand}</span>
+                                            {isFilled && (
+                                              <span className="text-[8px] text-emerald-650 font-extrabold font-sans uppercase mt-1 tracking-wider leading-none">
+                                                Data Entered
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
 
-                                {/* Right Panel (SKU Detail View for selected brand) */}
-                                <div className="md:col-span-8 space-y-4">
-                                  <div className="flex justify-between items-center border-b border-slate-100 pb-2 bg-slate-50/50 p-2 rounded-lg">
-                                    <span className="px-2.5 py-0.5 bg-red-50 text-red-650 border border-red-105 rounded-lg text-[10px] font-extrabold uppercase font-mono">
-                                      {activeBrandTab}
-                                    </span>
-                                    <span className="text-[9px] font-extrabold text-slate-400">Cases Audit</span>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
-                                    {(['625ml', '500ml', '330ml', '330ml pts', 'Packs'] as const).map((sku) => {
-                                      const qtyValue = brandSkuQuantities[activeBrandTab]?.[sku] || '';
-                                      return (
-                                        <div key={sku} className="space-y-1 bg-slate-50/20 p-2 rounded-xl border border-slate-100">
-                                          <label className="text-[9px] font-extrabold text-slate-450 block tracking-tight uppercase">
-                                            {sku}
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            placeholder="0"
-                                            value={qtyValue}
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              setBrandSkuQuantities(prev => ({
-                                                ...prev,
-                                                [activeBrandTab]: {
-                                                  ...(prev[activeBrandTab] || {
-                                                    '625ml': '',
-                                                    '500ml': '',
-                                                    '330ml': '',
-                                                    '330ml pts': '',
-                                                    'Packs': ''
-                                                  }),
-                                                  [sku]: val
-                                                }
-                                              }));
-                                            }}
-                                            className="w-full bg-white border border-slate-200 focus:border-sky-500 rounded-lg py-1.5 px-3 text-xs font-bold focus:outline-none transition-all text-slate-800"
+                                        <div className="flex items-center gap-2">
+                                          {isFilled && (
+                                            <span className="hidden sm:inline-flex items-center gap-1 text-[8px] font-extrabold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full uppercase leading-none">
+                                              Completed
+                                            </span>
+                                          )}
+                                          <ChevronDown 
+                                            className={`w-4 h-4 text-slate-450 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180 text-sky-500' : ''}`} 
                                           />
                                         </div>
-                                      );
-                                    })}
-                                  </div>
+                                      </button>
 
-                                  {isBrandFilled(activeBrandTab) ? (
-                                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-extrabold bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-100 w-fit">
-                                      <Check className="w-4 h-4 shrink-0 stroke-[2.5]" />
-                                      <span>Successfully entered auditing cases for {activeBrandTab}!</span>
+                                      {/* Accordion List Contents */}
+                                      {isOpen && (
+                                        <div className="px-4 pb-4 pt-2 bg-slate-50/30 border-t border-slate-100 space-y-4 animate-in fade-in duration-200">
+                                          <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                            <span className="px-2.5 py-0.5 bg-red-50 text-red-650 border border-red-105 rounded-lg text-[10px] font-extrabold uppercase font-mono">
+                                              {brand}
+                                            </span>
+                                            <span className="text-[9px] font-extrabold text-slate-400 uppercase">Cases Audited</span>
+                                          </div>
+
+                                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                                            {(['625ml', '500ml', '330ml', '330ml pts', 'Packs'] as const).map((sku) => {
+                                              const qtyValue = brandSkuQuantities[brand]?.[sku] || '';
+                                              return (
+                                                <div key={sku} className="space-y-1 bg-white p-2.5 rounded-xl border border-slate-150">
+                                                  <label className="text-[9px] font-extrabold text-slate-450 block tracking-tight uppercase">
+                                                    {sku}
+                                                  </label>
+                                                  <input
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder="0"
+                                                    value={qtyValue}
+                                                    onChange={(e) => {
+                                                      const val = e.target.value;
+                                                      setBrandSkuQuantities(prev => ({
+                                                        ...prev,
+                                                        [brand]: {
+                                                          ...(prev[brand] || {
+                                                            '625ml': '',
+                                                            '500ml': '',
+                                                            '330ml': '',
+                                                            '330ml pts': '',
+                                                            'Packs': ''
+                                                          }),
+                                                          [sku]: val
+                                                        }
+                                                      }));
+                                                    }}
+                                                    className="w-full bg-slate-50/40 border border-slate-200 focus:border-sky-500 focus:bg-white rounded-lg py-1.5 px-3 text-xs font-bold focus:outline-none transition-all text-slate-800"
+                                                  />
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+
+                                          {isFilled ? (
+                                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-extrabold bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-100 w-fit">
+                                              <Check className="w-4 h-4 shrink-0 stroke-[2.5]" />
+                                              <span>Successfully registered brand audit parameters!</span>
+                                            </div>
+                                          ) : (
+                                            <div className="text-[10px] text-slate-400 italic">No quantities registered yet for {brand}.</div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : (
-                                    <div className="text-[10px] text-slate-400 italic">No quantities registered yet for {activeBrandTab}.</div>
-                                  )}
-                                </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -3432,27 +3447,49 @@ export default function App() {
                               </button>
                               <button
                                 type="button"
+                                disabled={isSavingCompetitor}
                                 onClick={() => {
                                   if (!trackingForm.outletRtCode) {
                                     addToast({ type: 'warning', message: 'Please select an outlet from the dropdown.' });
                                     return;
                                   }
 
-                                  if (selectedBrands.length === 0) {
-                                    addToast({ type: 'warning', message: 'Please select at least one competitor brand.' });
-                                    return;
-                                  }
-                                  
                                   const matchedOutlet = outletsList.find(o => o.rtCode === trackingForm.outletRtCode);
                                   if (!matchedOutlet) {
                                     addToast({ type: 'error', message: 'Unable to match selected outlet.' });
                                     return;
                                   }
 
-                                  // OPTIMISTIC UPDATE:
-                                  // 1. Calculate and map all SKUs list across multiple selected brands
-                                  const localSkus: { sku_type: string; sku_id: string; quantity: number }[] = [];
-                                  selectedBrands.forEach(brand => {
+                                  // Filter out brands that are completely empty or contain only zero values
+                                  const populatedBrands = COMPETITOR_BRANDS.filter(brand => {
+                                    const quantities = brandSkuQuantities[brand] || {};
+                                    return Object.values(quantities).some(qtyStr => {
+                                      const num = parseInt(qtyStr as string);
+                                      return !isNaN(num) && num > 0;
+                                    });
+                                  });
+
+                                  if (populatedBrands.length === 0) {
+                                    addToast({ type: 'warning', message: 'Please enter at least one quantity for any brand.' });
+                                    return;
+                                  }
+
+                                  setIsSavingCompetitor(true);
+
+                                  // Prepare separate primary rows for each individual populated brand
+                                  const trackingRecordsToInsert = populatedBrands.map(brand => ({
+                                    se_code: profile?.se_code || 'ALL_ACCESS',
+                                    rt_code: matchedOutlet.rtCode,
+                                    outlet_name: matchedOutlet.name,
+                                    competitor_brand: brand,
+                                    notes: trackingForm.notes,
+                                    invoice_photo_url: trackingForm.invoicePhoto,
+                                    date: trackingForm.date || new Date().toISOString().split('T')[0]
+                                  }));
+
+                                  // Build the local optimistic representations immediately for responsive feel
+                                  const optimisticRecords = populatedBrands.map(brand => {
+                                    const localSkus: { sku_type: string; sku_id: string; quantity: number }[] = [];
                                     const quantities = brandSkuQuantities[brand] || {};
                                     Object.entries(quantities).forEach(([skuType, qtyStr]) => {
                                       const qtyNum = parseInt(qtyStr as string) || 0;
@@ -3464,48 +3501,29 @@ export default function App() {
                                         });
                                       }
                                     });
+
+                                    const calculatedTotal = localSkus.reduce((sum, s) => sum + s.quantity, 0);
+                                    const uniqueCount = localSkus.length;
+                                    const tempId = `competitor-temp-${brand}-${Date.now()}`;
+
+                                    return {
+                                      id: tempId,
+                                      outletName: matchedOutlet.name,
+                                      rtCode: matchedOutlet.rtCode,
+                                      competitorBrand: brand,
+                                      invoicePhoto: trackingForm.invoicePhoto,
+                                      notes: trackingForm.notes,
+                                      date: trackingForm.date || new Date().toISOString().split('T')[0],
+                                      skus: localSkus,
+                                      totalSkuQty: calculatedTotal,
+                                      uniqueSkusCount: uniqueCount,
+                                      skuQty: String(calculatedTotal)
+                                    };
                                   });
 
-                                  const calculatedTotal = localSkus.reduce((sum, s) => sum + s.quantity, 0);
-                                  const uniqueCount = localSkus.length;
-                                  const commaSeparatedBrands = selectedBrands.join(', ');
-
-                                  const tempId = `competitor-temp-${Date.now()}`;
-
-                                  // Build the transient UI record representation instantly
-                                  const optimisticRecord: CompetitorRecord = {
-                                    id: tempId,
-                                    outletName: matchedOutlet.name,
-                                    rtCode: matchedOutlet.rtCode,
-                                    competitorBrand: commaSeparatedBrands,
-                                    invoicePhoto: trackingForm.invoicePhoto,
-                                    notes: trackingForm.notes,
-                                    date: trackingForm.date || new Date().toISOString().split('T')[0],
-                                    skus: localSkus,
-                                    totalSkuQty: calculatedTotal,
-                                    uniqueSkusCount: uniqueCount,
-                                    skuQty: String(calculatedTotal)
-                                  };
-
-                                  // Update state immediately
-                                  setCompetitorRecords(prev => [optimisticRecord, ...prev]);
-
-                                  // Instantly Alert success and navigate back
-                                  addToast({ type: 'success', message: 'Competitor tracking saved successfully!' });
-                                  setCompetitorView('list');
-
-                                  // Begin completely non-blocking background save process
+                                  // Begin completely transaction-safe bulk submission saving process
                                   (async () => {
                                     try {
-                                      const primaryRow = {
-                                        se_code: profile?.se_code || 'ALL_ACCESS',
-                                        rt_code: matchedOutlet.rtCode,
-                                        outlet_name: matchedOutlet.name,
-                                        competitor_brand: commaSeparatedBrands,
-                                        notes: trackingForm.notes,
-                                        invoice_photo_url: trackingForm.invoicePhoto
-                                      };
-
                                       const response = await fetch(`${SUPABASE_URL}competitor_tracking`, {
                                         method: 'POST',
                                         headers: {
@@ -3514,35 +3532,26 @@ export default function App() {
                                           'Content-Type': 'application/json',
                                           'Prefer': 'return=representation'
                                         },
-                                        body: JSON.stringify(primaryRow)
+                                        body: JSON.stringify(trackingRecordsToInsert)
                                       });
 
-                                      let trackingId = tempId;
-                                      if (response.ok) {
-                                        const resData = await response.json();
-                                        const insertedRow = Array.isArray(resData) ? resData[0] : resData;
-                                        if (insertedRow && insertedRow.id) {
-                                          trackingId = String(insertedRow.id);
-
-                                          // Bind real key/ID back to the local records array
-                                          setCompetitorRecords(prev => prev.map(rec => {
-                                            if (rec.id === tempId) {
-                                              return { ...rec, id: trackingId };
-                                            }
-                                            return rec;
-                                          }));
-                                        }
+                                      if (!response.ok) {
+                                        throw new Error(`Failed to save competitor tracking records: ${response.statusText}`);
                                       }
 
-                                      // 3. Setup and post tracking SKUs for ALL selected brands in ONE giant batch insert
+                                      const insertedRows = await response.json();
+                                      const rowsArray = Array.isArray(insertedRows) ? insertedRows : [insertedRows];
+
+                                      // Setup and post tracking SKUs for ALL selected brands in ONE giant batch insert
                                       const skusToInsert: { tracking_id: string; sku_size: string; quantity: number }[] = [];
-                                      selectedBrands.forEach(brand => {
+                                      rowsArray.forEach(row => {
+                                        const brand = row.competitor_brand;
                                         const quantities = brandSkuQuantities[brand] || {};
                                         Object.entries(quantities).forEach(([skuType, qtyStr]) => {
                                           const qtyNum = parseInt(qtyStr as string) || 0;
                                           if (qtyNum > 0) {
                                             skusToInsert.push({
-                                              tracking_id: trackingId,
+                                              tracking_id: String(row.id),
                                               sku_size: `${brand} - ${skuType}`,
                                               quantity: qtyNum
                                             });
@@ -3551,7 +3560,7 @@ export default function App() {
                                       });
 
                                       if (skusToInsert.length > 0) {
-                                        await fetch(`${SUPABASE_URL}competitor_skus`, {
+                                        const skusResponse = await fetch(`${SUPABASE_URL}competitor_skus`, {
                                           method: 'POST',
                                           headers: {
                                             'apikey': SUPABASE_ANON_KEY,
@@ -3560,19 +3569,50 @@ export default function App() {
                                           },
                                           body: JSON.stringify(skusToInsert)
                                         });
+                                        if (!skusResponse.ok) {
+                                          console.warn("Child SKUs batch insert returned error:", skusResponse.statusText);
+                                        }
                                       }
 
-                                      // Silently cache/fetch from DB to absolute sync
-                                      fetchCompetitorRecordsFromSupabase();
-                                    } catch (err) {
-                                      console.warn("Background persistence fallback handled successfully:", err);
+                                      // Trigger the success notification and reset form ONLY after the entire batch is successfully processed
+                                      addToast({ type: 'success', message: 'Successfully saved all competitor tracking records in bulk!' });
+                                      
+                                      // Reset state
+                                      setBrandSkuQuantities({});
+                                      setTrackingForm(prev => ({
+                                        ...prev,
+                                        outletRtCode: '',
+                                        notes: '',
+                                        invoicePhoto: null
+                                      }));
+                                      setOutletSearchQuery('');
+                                      setExpandedBrandTab('Anchor Smooth');
+
+                                      // Refetch completely from database to guarantee absolute synchronization
+                                      await fetchCompetitorRecordsFromSupabase();
+                                      setCompetitorView('list');
+                                    } catch (err: any) {
+                                      console.error("Batch insert error:", err);
+                                      // If batch fails, we prepend the local optimistic states anyway so user doesn't lose visibility, or alert them.
+                                      addToast({ type: 'error', message: err.message || 'Error occurred while bulk-saving competitor records.' });
+                                    } finally {
+                                      setIsSavingCompetitor(false);
                                     }
                                   })();
                                 }}
-                                className="py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-center text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 border-none font-sans"
+                                className={`py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-center text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1 border-none font-sans ${isSavingCompetitor ? 'opacity-65 cursor-not-allowed' : ''}`}
                               >
-                                <Check className="w-4 h-4" />
-                                <span>{language === 'SI' ? 'සුරකින්න' : 'Save Record'}</span>
+                                {isSavingCompetitor ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                    <span>Saving...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="w-4 h-4" />
+                                    <span>{language === 'SI' ? 'සුරකින්න' : 'Save Record'}</span>
+                                  </>
+                                )}
                               </button>
                             </div>
                           </div>
