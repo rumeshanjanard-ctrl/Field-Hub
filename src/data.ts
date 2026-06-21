@@ -46,6 +46,7 @@ export interface Outlet {
   name: string;
   address: string;
   seCode?: string;
+  seName?: string;
 }
 
 // @ts-ignore

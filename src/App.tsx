@@ -26,8 +26,6 @@ import {
   NotificationItem, 
   Outlet 
 } from './data';
-import { exportCompetitorListToPDF, exportSingleCompetitorRecordToPDF } from './utils/pdfExport';
-import { FileText } from 'lucide-react';
 
 // Supabase REST client configuration & JS SDK client creation
 const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL || 'https://kbgtkoymrmpyltxoqdcz.supabase.co/rest/v1/';
@@ -302,6 +300,8 @@ export default function App() {
     skus?: { sku_type: string; quantity: string | number }[];
     totalSkuQty?: number;
     uniqueSkusCount?: number;
+    seCode?: string;
+    seName?: string;
   }
 
   const COMPETITOR_BRANDS = [
@@ -425,44 +425,12 @@ export default function App() {
   const [competitorDateFilter, setCompetitorDateFilter] = useState<string>('');
 
   const [isFetchingCompetitors, setIsFetchingCompetitors] = useState(false);
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-
-  const handleExportListToPDF = async () => {
-    setIsGeneratingPDF(true);
-    addToast({ type: 'success', message: 'Generating PDF Summary...' });
-    setTimeout(async () => {
-      try {
-        await exportCompetitorListToPDF(sortedAndFilteredCompetitorRecords, competitorDateFilter);
-        addToast({ type: 'success', message: 'PDF report summary downloaded!' });
-      } catch (err) {
-        console.error('[PDF Export Error]', err);
-        addToast({ type: 'error', message: 'Could not render PDF document.' });
-      } finally {
-        setIsGeneratingPDF(false);
-      }
-    }, 400);
-  };
-
-  const handleExportSingleRecordToPDF = async (record: any) => {
-    setIsGeneratingPDF(true);
-    addToast({ type: 'success', message: 'Compiling photo with audit metadata...' });
-    setTimeout(async () => {
-      try {
-        await exportSingleCompetitorRecordToPDF(record, outletsList);
-        addToast({ type: 'success', message: 'Detailed PDF with photo downloaded!' });
-      } catch (err) {
-        console.error('[PDF Export Error]', err);
-        addToast({ type: 'error', message: 'Could not compile photo PDF.' });
-      } finally {
-        setIsGeneratingPDF(false);
-      }
-    }, 400);
-  };
 
   const fetchCompetitorRecordsFromSupabase = async () => {
     setIsFetchingCompetitors(true);
     try {
       const seCode = profile?.se_code || 'ALL_ACCESS';
+      // Query competitor_tracking with only competitor_skus join. No outlets join is requested to prevent fk warnings.
       const url = `${SUPABASE_URL}competitor_tracking?se_code=eq.${encodeURIComponent(seCode)}&select=*,competitor_skus(*)&order=id.desc`;
       let response = await fetch(url, {
         headers: {
@@ -473,7 +441,6 @@ export default function App() {
 
       let data: any[] = [];
       if (!response.ok) {
-        console.warn("Joined fetch of competitor_tracking failed, trying fallback without join...");
         const urlFallback = `${SUPABASE_URL}competitor_tracking?se_code=eq.${encodeURIComponent(seCode)}&select=*&order=id.desc`;
         response = await fetch(urlFallback, {
           headers: {
@@ -481,25 +448,36 @@ export default function App() {
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
           }
         });
-        if (response.ok) {
-          data = await response.json();
-          try {
-            const skusRes = await fetch(`${SUPABASE_URL}competitor_skus?select=*`, {
-              headers: {
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-              }
-            });
-            if (skusRes.ok) {
-              const allSkus = await skusRes.json();
-              data = data.map(item => ({
-                ...item,
-                competitor_skus: allSkus.filter((s: any) => s.tracking_id === item.id)
-              }));
+        if (!response.ok) {
+          const urlFallback2 = `${SUPABASE_URL}competitor_tracking?se_code=eq.${encodeURIComponent(seCode)}&select=*&order=id.desc`;
+          response = await fetch(urlFallback2, {
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
             }
-          } catch (errSkus) {
-            console.warn("Separated fetch of competitor_skus failed:", errSkus);
+          });
+          if (response.ok) {
+            data = await response.json();
+            try {
+              const skusRes = await fetch(`${SUPABASE_URL}competitor_skus?select=*`, {
+                headers: {
+                  'apikey': SUPABASE_ANON_KEY,
+                  'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                }
+              });
+              if (skusRes.ok) {
+                const allSkus = await skusRes.json();
+                data = data.map(item => ({
+                  ...item,
+                  competitor_skus: allSkus.filter((s: any) => s.tracking_id === item.id)
+                }));
+              }
+            } catch (errSkus) {
+              console.warn("Separated fetch of competitor_skus failed:", errSkus);
+            }
           }
+        } else {
+          data = await response.json();
         }
       } else {
         data = await response.json();
@@ -515,6 +493,25 @@ export default function App() {
           const totalQty = skus.reduce((sum: number, s: any) => sum + (parseInt(s.quantity) || 0), 0);
           const uniqueSkusCount = skus.filter((s: any) => (parseInt(s.quantity) || 0) > 0).length;
 
+          // Locally find the matching outlet from outletsList using rtCode
+          const trackingRtCode = item.rt_code || '';
+          const trackingOutletName = item.outlet_name || '';
+          const matchedOutlet = outletsList.find(o => 
+            (trackingRtCode && o.rtCode === trackingRtCode) || 
+            (trackingOutletName && o.name.toLowerCase() === trackingOutletName.toLowerCase())
+          );
+
+          // Correctly fallback if seName is not explicitly synced
+          const localSeName = matchedOutlet?.seName || item.se_name || '';
+
+          const cleanSeName = (val: string) => {
+            if (!val) return '';
+            return val.replace(/\(ALL_ACCESS\)/gi, '').replace(/ALL_ACCESS/gi, '').replace(/\s+/g, ' ').trim();
+          };
+
+          const rawSeName = localSeName || (item.se_code === profile?.se_code ? profile?.full_name : 'Rumesh Anjanawardana');
+          const finalSeName = cleanSeName(rawSeName);
+
           return {
             id: String(item.id),
             outletName: item.outlet_name || '',
@@ -527,7 +524,9 @@ export default function App() {
             date: item.created_at ? item.created_at.split('T')[0] : (item.date || new Date().toISOString().split('T')[0]),
             skus: skus,
             totalSkuQty: totalQty,
-            uniqueSkusCount: uniqueSkusCount
+            uniqueSkusCount: uniqueSkusCount,
+            seCode: item.se_code || 'ALL_ACCESS',
+            seName: finalSeName
           };
         });
         setCompetitorRecords(mapped);
@@ -973,6 +972,80 @@ export default function App() {
   const [isLoadingCapacities, setIsLoadingCapacities] = useState(false);
   const [isLoadingIssueTypes, setIsLoadingIssueTypes] = useState(false);
 
+  // State to track expanded visit card
+  const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
+
+  // Group competitor records by outlet name AND date
+  const groupedCompetitorVisits = useMemo(() => {
+    const visitsMap: Record<string, any> = {};
+
+    sortedAndFilteredCompetitorRecords.forEach(rec => {
+      const key = `${rec.rtCode || 'RT'}_${rec.date || 'DATE'}`;
+      const matchedOutlet = outletsList.find(o => o.rtCode === rec.rtCode);
+      const distRoute = matchedOutlet?.address || 'Territory Delivery Circle';
+
+      if (!visitsMap[key]) {
+        visitsMap[key] = {
+          id: key,
+          rtCode: rec.rtCode || '',
+          outletName: rec.outletName || '',
+          date: rec.date || '',
+          seCode: rec.seCode || 'ALL_ACCESS',
+          seName: (rec.seName || profile?.full_name || 'Rumesh Anjanawardana').replace(/\(ALL_ACCESS\)/gi, '').replace(/ALL_ACCESS/gi, '').replace(/\s+/g, ' ').trim(),
+          notes: rec.notes ? [rec.notes] : [],
+          invoicePhotos: rec.invoicePhoto ? [rec.invoicePhoto] : [],
+          brands: [],
+          totalSkuQty: 0,
+          distRoute,
+          originalRecords: []
+        };
+      } else {
+        if (rec.notes && !visitsMap[key].notes.includes(rec.notes)) {
+          visitsMap[key].notes.push(rec.notes);
+        }
+        if (rec.invoicePhoto && !visitsMap[key].invoicePhotos.includes(rec.invoicePhoto)) {
+          visitsMap[key].invoicePhotos.push(rec.invoicePhoto);
+        }
+      }
+
+      visitsMap[key].originalRecords.push(rec);
+
+      const brandName = rec.competitorBrand || 'Unknown Brand';
+      const skusList: { size: string; qty: number }[] = [];
+      if (rec.skus && rec.skus.length > 0) {
+        rec.skus.forEach((sku: any) => {
+          const rawSkuType = sku.sku_type || sku.sku_size || '';
+          const qty = parseInt(sku.quantity) || 0;
+          
+          let cleanSize = rawSkuType;
+          if (rawSkuType.includes(' - ')) {
+            const parts = rawSkuType.split(' - ');
+            cleanSize = parts.slice(1).join(' - ').trim();
+          }
+          skusList.push({ size: cleanSize, qty });
+        });
+      }
+
+      const totalBrandQty = skusList.reduce((sum, s) => sum + s.qty, 0);
+
+      visitsMap[key].brands.push({
+        brandName,
+        skus: skusList,
+        totalSkuQty: totalBrandQty,
+        notes: rec.notes || undefined,
+        invoicePhoto: rec.invoicePhoto || undefined,
+      });
+
+      visitsMap[key].totalSkuQty += totalBrandQty;
+    });
+
+    return Object.values(visitsMap).sort((a, b) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateB.localeCompare(dateA);
+    });
+  }, [sortedAndFilteredCompetitorRecords, outletsList, profile]);
+
   const fetchOutletsFromSupabase = async () => {
     setIsLoadingOutlets(true);
     try {
@@ -991,7 +1064,8 @@ export default function App() {
               rtCode: o.rt_code || '',
               name: o.outlet_name || '',
               address: o.address ? o.address.trim() : 'Colombo Base, Sri Lanka',
-              seCode: o.se_code || ''
+              seCode: o.se_code || '',
+              seName: o.se_name || ''
             }));
             setOutletsList(mappedOutlets);
           }
@@ -2831,203 +2905,298 @@ export default function App() {
                       {competitorView === 'list' && (
                         <div className="px-5 py-4 space-y-5 animate-in fade-in duration-200">
                           
-                          {/* Competitor system welcome/stats summary panel */}
-                          <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-sm border border-slate-800 flex items-center justify-between gap-4">
-                            <div className="space-y-1">
-                              <h3 className="text-base font-bold font-sans text-slate-100">
-                                Field Tracking
-                              </h3>
+                          {/* Simplified Module Header */}
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3.5 pb-4 border-b border-slate-200">
+                            <div>
+                              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                                <Store className="w-5 h-5 text-slate-800" />
+                                <span>{language === 'SI' ? 'වැඩසටහන් වාර්තා' : 'Competitor Tracking Feed'}</span>
+                              </h2>
+                              <p className="text-xs text-slate-400 mt-1">
+                                {language === 'SI' ? 'ප්‍රධාන තරඟකරුවන්ගේ වෙළඳපල කොටස විග්‍රහ කරන්න' : 'Audit and analyze real-time competitor market share'}
+                              </p>
                             </div>
-                            <button
-                              onClick={() => {
-                                setTrackingForm({
-                                  outletRtCode: '',
-                                  competitorBrand: '',
-                                  skuName: '',
-                                  skuQty: '',
-                                  skuPrice: '',
-                                  invoicePhoto: null,
-                                  notes: '',
-                                  date: new Date().toISOString().split('T')[0]
-                                });
-                                setSelectedBrands([]);
-                                setBrandSkuQuantities({});
-                                setSkuQuantities({
-                                  '625ml': '',
-                                  '500ml': '',
-                                  '330ml': '',
-                                  '330ml pts': '',
-                                  'Packs': ''
-                                });
-                                setOutletSearchQuery('');
-                                setIsOutletSearchDropdownOpen(false);
-                                setCompetitorView('add');
-                              }}
-                              className="bg-sky-500 hover:bg-sky-600 active:scale-95 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border-none font-sans"
-                            >
-                              <Plus className="w-4 h-4 stroke-[2.5]" />
-                              <span>{language === 'SI' ? 'එකතු කරන්න' : 'Add Tracking'}</span>
-                            </button>
+                            
+                            {/* Primary Action Buttons */}
+                            <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0 font-sans">
+                              {/* Add Tracking Button */}
+                              <button
+                                onClick={() => {
+                                  setTrackingForm({
+                                    outletRtCode: '',
+                                    competitorBrand: '',
+                                    skuName: '',
+                                    skuQty: '',
+                                    skuPrice: '',
+                                    invoicePhoto: null,
+                                    notes: '',
+                                    date: new Date().toISOString().split('T')[0]
+                                  });
+                                  setSelectedBrands([]);
+                                  setBrandSkuQuantities({});
+                                  setSkuQuantities({
+                                    '625ml': '',
+                                    '500ml': '',
+                                    '330ml': '',
+                                    '330ml pts': '',
+                                    'Packs': ''
+                                  });
+                                  setOutletSearchQuery('');
+                                  setIsOutletSearchDropdownOpen(false);
+                                  setCompetitorView('add');
+                                }}
+                                className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer border-none font-sans flex-1 sm:flex-none"
+                              >
+                                <Plus className="w-4 h-4 stroke-[2.5]" />
+                                <span>{language === 'SI' ? 'එකතු කරන්න' : 'Add Tracking'}</span>
+                              </button>
+
+                              {/* Export to Excel (Optimized raw excel translation) */}
+                              <button
+                                onClick={exportCompetitorDataToCSV}
+                                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer border-none font-sans shrink-0 flex-1 sm:flex-none"
+                              >
+                                <FileSpreadsheet className="w-4 h-4" />
+                                <span>{language === 'SI' ? 'Excel ගොනුව' : 'Export to Excel'}</span>
+                              </button>
+                            </div>
                           </div>
 
-                          {/* Date Filter & Export Panel - Horizontal Utility Bar on Desktop */}
-                          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-3xs space-y-3">
-                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                              {/* Date Picker Input */}
-                              <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 min-w-0">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
-                                  {language === 'SI' ? 'දිනය පෙරන්න:' : 'Filter Date:'}
-                                </span>
-                                <div className="flex items-center gap-2 w-full sm:w-auto">
-                                  <div className="relative flex-1 sm:flex-none">
-                                    <input
-                                      type="date"
-                                      value={competitorDateFilter}
-                                      onChange={(e) => setCompetitorDateFilter(e.target.value)}
-                                      className="w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-500 hover:bg-slate-100 transition-all cursor-pointer font-sans"
-                                    />
-                                  </div>
-                                  {competitorDateFilter && (
-                                    <button
-                                      onClick={() => setCompetitorDateFilter('')}
-                                      className="px-2.5 py-1.5 text-[9px] font-extrabold text-sky-600 bg-sky-50 hover:bg-sky-100 active:scale-95 rounded-lg border border-sky-200/50 uppercase tracking-wider font-sans cursor-pointer transition-all shrink-0"
-                                    >
-                                      {language === 'SI' ? 'සියල්ල' : 'Show All'}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Export buttons panel wrapper */}
-                              <div className="flex flex-col sm:flex-row items-center gap-2.5 shrink-0 w-full lg:w-auto">
-                                {/* Export to Excel / CSV */}
+                          {/* Date Filter & Control strip */}
+                          <div className="bg-slate-50 border border-slate-250/70 rounded-2xl p-3 shadow-3xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 font-sans">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                                {language === 'SI' ? 'දිනය පෙරන්න:' : 'Filter Date:'}
+                              </span>
+                              <input
+                                type="date"
+                                value={competitorDateFilter}
+                                onChange={(e) => setCompetitorDateFilter(e.target.value)}
+                                className="bg-white border border-slate-200 rounded-xl py-1 px-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-500 hover:bg-slate-50 transition-all cursor-pointer font-sans"
+                              />
+                              {competitorDateFilter && (
                                 <button
-                                  onClick={exportCompetitorDataToCSV}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 w-full sm:w-auto"
+                                  onClick={() => setCompetitorDateFilter('')}
+                                  className="px-2 py-1 text-[9px] font-extrabold text-sky-650 bg-white hover:bg-sky-50 active:scale-95 rounded-lg border border-sky-200/50 uppercase tracking-wider font-sans cursor-pointer transition-all shrink-0"
                                 >
-                                  <FileSpreadsheet className="w-4 h-4" />
-                                  <span>{language === 'SI' ? 'Excel ගොනුව' : 'Export to Excel'}</span>
+                                  {language === 'SI' ? 'සියල්ල' : 'Show All'}
                                 </button>
-
-                                {/* Export to PDF (Direct client-side generation) */}
-                                <button
-                                  onClick={handleExportListToPDF}
-                                  disabled={isGeneratingPDF}
-                                  className={`bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 w-full sm:w-auto ${
-                                    isGeneratingPDF ? 'opacity-70 cursor-not-allowed' : ''
-                                  }`}
-                                >
-                                  {isGeneratingPDF ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 animate-spin" />
-                                      <span>{language === 'SI' ? 'සකසමින්...' : 'Generating PDF...'}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <FileText className="w-4 h-4" />
-                                      <span>{language === 'SI' ? 'PDF ගොනුව' : 'Export to PDF'}</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Active filter description */}
-                            <div className="text-[10px] text-slate-400 font-medium font-sans flex items-center gap-1.5 border-t border-slate-100 pt-2.5">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                              {competitorDateFilter ? (
-                                <span>
-                                  {language === 'SI' ? 'පෙරහන් කළ දිනය:' : 'Showing records for date:'}{' '}
-                                  <strong className="text-sky-600 font-extrabold font-mono">{competitorDateFilter}</strong>
-                                </span>
-                              ) : (
-                                <span>{language === 'SI' ? 'සියලුම පෙර පැවති වාර්තා පෙන්වයි' : 'Showing all historic records'}</span>
                               )}
                             </div>
+
+                            <div className="flex justify-between sm:justify-end items-center gap-3 text-[10px] text-slate-400 font-bold font-mono py-1 px-3 bg-slate-100 rounded-lg">
+                              <span>{language === 'SI' ? 'සක්‍රීය පෙරහන්:' : 'Active Filter'}</span>
+                              <span className="text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                {competitorDateFilter ? competitorDateFilter : (language === 'SI' ? 'සියල්ල' : 'All Historic')}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Display Saved Competitor Records */}
+                          {/* Display Saved Competitor Records (Grouped Outlet Card layout) */}
                           <div className="space-y-3">
                             <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
                               <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">
-                                {language === 'SI' ? 'පසුගිය වාර්තා' : 'Competitor Activity Feed'} ({sortedAndFilteredCompetitorRecords.length})
+                                {language === 'SI' ? 'පසුගිය සංචාරයන්' : 'Grouped Outlet Visits Activity Feed'} ({groupedCompetitorVisits.length})
                               </h3>
                               <span className="text-[9px] font-extrabold text-slate-400 font-mono">POS Handshake Live</span>
                             </div>
 
-                            {sortedAndFilteredCompetitorRecords.length > 0 ? (
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {sortedAndFilteredCompetitorRecords.map((rec) => (
-                                  <motion.div
-                                    key={rec.id}
-                                    layoutId={rec.id}
-                                    initial={{ opacity: 0, y: 8 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    onClick={() => {
-                                      setSelectedCompetitorRecord(rec);
-                                      setCompetitorView('detail');
-                                    }}
-                                    className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-3xs hover:shadow-md hover:border-sky-300 lg:hover:-translate-y-0.5 transition-all duration-200 text-left relative overflow-hidden group cursor-pointer flex flex-col justify-between"
-                                  >
-                                    <div>
-                                      {/* Left accent strip */}
-                                      <div className="absolute inset-y-0 left-0 w-1 bg-sky-500"></div>
-
-                                      <div className="flex justify-between items-start gap-2 mb-1.5 pl-1">
-                                        <div>
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[8px] font-extrabold tracking-tight font-mono">
-                                              {rec.rtCode}
-                                            </span>
-                                            <span className="text-[9px] text-slate-400 font-bold font-mono">
-                                              {rec.date}
-                                            </span>
+                            {groupedCompetitorVisits.length > 0 ? (
+                              <div className="grid grid-cols-1 gap-4 font-sans text-left">
+                                {groupedCompetitorVisits.map((visit) => {
+                                  const isExpanded = expandedVisitId === visit.id;
+                                  return (
+                                    <motion.div
+                                      key={visit.id}
+                                      layoutId={visit.id}
+                                      initial={{ opacity: 0, y: 8 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      className={`bg-white rounded-2xl border transition-all duration-200 relative overflow-hidden ${
+                                        isExpanded 
+                                          ? 'border-sky-400 ring-1 ring-sky-400/35 shadow-md' 
+                                          : 'border-slate-250/70 hover:border-sky-300 hover:shadow-xs shadow-4xs'
+                                      }`}
+                                    >
+                                      {/* Clickable Header Area */}
+                                      <div 
+                                        onClick={() => setExpandedVisitId(isExpanded ? null : visit.id)}
+                                        className="p-4 sm:p-5 cursor-pointer hover:bg-slate-50/50 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 select-none"
+                                      >
+                                        <div className="flex items-start gap-4">
+                                          <div className="p-2.5 bg-slate-100 text-slate-800 rounded-xl mt-0.5 shrink-0">
+                                            <Store className="w-5 h-5 text-slate-700" />
                                           </div>
-                                          <h4 className="font-sans font-extrabold text-xs sm:text-sm text-slate-900 mt-1.5 group-hover:text-sky-600 transition-colors line-clamp-2">
-                                            {rec.outletName}
-                                          </h4>
-                                        </div>
-
-                                        <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[8px] font-extrabold tracking-tight font-mono shrink-0 whitespace-nowrap">
-                                          {rec.uniqueSkusCount || 0} SKUs
-                                        </span>
-                                      </div>
-
-                                      {/* Brand summary pill list */}
-                                      <div className="mt-2 pl-1 flex flex-wrap gap-1">
-                                        {(rec.competitorBrand || '').split(',').map((b: string) => b.trim()).filter(Boolean).map((brand: string) => (
-                                          <span key={brand} className="px-1.5 py-0.5 bg-red-50 text-red-600 border border-red-100 rounded-[4px] text-[7px] font-extrabold tracking-wider uppercase font-mono">
-                                            {brand}
-                                          </span>
-                                        ))}
-                                      </div>
-
-                                      <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100 pl-1">
-                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-1">SKUs Logged</span>
-                                        <div className="flex flex-wrap gap-1">
-                                          {rec.skus && rec.skus.length > 0 ? (
-                                            rec.skus.filter((sku: any) => (parseInt(sku.quantity) || 0) > 0).map((sku: any) => (
-                                              <span key={sku.sku_type || sku.id} className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 rounded text-[8px] font-bold font-mono">
-                                                {sku.sku_type}: <strong className="text-slate-800 font-extrabold">{sku.quantity}</strong>
+                                          
+                                          <div>
+                                            <div className="flex flex-wrap items-center gap-1.5 text-[8 px] font-bold uppercase tracking-tight">
+                                              <span className="px-1.5 py-0.5 bg-sky-50 text-sky-655 border border-sky-100 rounded text-[9px] font-extrabold font-mono shrink-0">
+                                                {visit.rtCode}
                                               </span>
-                                            ))
-                                          ) : (
-                                            <span className="text-[9px] text-slate-450 font-sans italic">No individual SKU cases logged (Total: {rec.skuQty || 0})</span>
-                                          )}
+                                              <span className="text-slate-400 font-extrabold font-mono text-[10px]">
+                                                {visit.date}
+                                              </span>
+                                              <span className="text-slate-350">•</span>
+                                              <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[9px] font-semibold shrink-0">
+                                                Route: {visit.distRoute}
+                                              </span>
+                                            </div>
+                                            
+                                            <h4 className="font-sans font-extrabold text-sm sm:text-base text-slate-900 mt-2 tracking-tight">
+                                              {visit.outletName}
+                                            </h4>
+
+                                            {/* SE Name prominently displayed for accountability */}
+                                            <div className="mt-2.5 flex flex-wrap items-center gap-1 text-slate-500 font-sans text-[11px]">
+                                              <span className="font-semibold text-slate-400 uppercase tracking-widest text-[9px]">Sales Executive:</span>
+                                              <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 rounded-md text-[10px] font-extrabold font-mono flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                {(visit.seName || '').replace(/\(ALL_ACCESS\)/gi, '').replace(/ALL_ACCESS/gi, '').trim()}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Counters & Chevron panel */}
+                                        <div className="flex items-center justify-between sm:justify-end gap-3.5 border-t border-slate-100 pt-3 md:pt-0 md:border-none font-sans shrink-0">
+                                          <div className="flex gap-2 font-sans">
+                                            <div className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl text-[10px] font-extrabold font-mono text-center shrink-0">
+                                              <div className="text-[8px] uppercase text-rose-500 font-sans tracking-wide leading-none">{language === 'SI' ? 'ලියාපදිංචි වෙළඳනාම' : 'Brands'}</div>
+                                              <div className="text-xs font-black mt-0.5">{visit.brands.length}</div>
+                                            </div>
+                                            <div className="px-3 py-1 bg-sky-50 text-sky-700 border border-sky-100 rounded-xl text-[10px] font-extrabold font-mono text-center shrink-0">
+                                              <div className="text-[8px] uppercase text-sky-500 font-sans tracking-wide leading-none">{language === 'SI' ? 'මුළු පරිමාව' : 'Total Vol'}</div>
+                                              <div className="text-xs font-black mt-0.5">{visit.totalSkuQty} cs</div>
+                                            </div>
+                                          </div>
+                                          
+                                          <ChevronDown 
+                                            className={`w-5 h-5 text-slate-400 transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-180 text-sky-500' : ''}`}
+                                          />
                                         </div>
                                       </div>
-                                    </div>
 
-                                    {rec.notes && (
-                                      <div className="mt-3 bg-slate-50 rounded-lg p-1.5 px-2 border border-slate-150 flex gap-1.5 items-center pl-1.5">
-                                        <span className="text-[12px] leading-none shrink-0 text-slate-400 select-none">✏️</span>
-                                        <p className="text-[9px] font-medium text-slate-500 leading-normal font-sans italic line-clamp-1">
-                                          "{rec.notes}"
-                                        </p>
-                                      </div>
-                                    )}
-                                  </motion.div>
-                                ))}
+                                      {/* Structured Drill-down expanded section */}
+                                      {isExpanded && (
+                                        <div className="px-4 pb-5 pt-3 sm:px-5 bg-slate-50 border-t border-slate-200/80 animate-in slide-in-from-top-2 duration-300 font-sans">
+                                          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                                            {/* Section tag */}
+                                            <div className="p-3 bg-slate-50/65 border-b border-slate-200 flex justify-between items-center px-4 font-sans">
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono">
+                                                {language === 'SI' ? 'සන්නාම සහ SKU විග්‍රහය' : 'Competitor Brand & SKU Inventory Audited'}
+                                              </span>
+                                              <span className="text-[8px] font-extrabold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full uppercase leading-none font-mono">
+                                                Grouped Audit Sync
+                                              </span>
+                                            </div>
+
+                                            {/* Structured table details */}
+                                            <div className="overflow-x-auto scrollbar-thin">
+                                              <table className="min-w-full text-left border-collapse font-sans text-xs">
+                                                <thead>
+                                                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                                    <th className="py-2.5 px-4 font-bold">{language === 'SI' ? 'තරඟකාරී සන්නාමය' : 'Competitor Brand'}</th>
+                                                    <th className="py-2.5 px-2 text-center font-mono">625ml</th>
+                                                    <th className="py-2.5 px-2 text-center font-mono">500ml</th>
+                                                    <th className="py-2.5 px-2 text-center font-mono">330ml</th>
+                                                    <th className="py-2.5 px-2 text-center font-mono">330ml pts</th>
+                                                    <th className="py-2.5 px-2 text-center font-mono">Packs</th>
+                                                    <th className="py-2.5 px-4 text-right font-bold text-slate-700 bg-slate-50/30">{language === 'SI' ? 'මුළු එකතුව' : 'Total Cases'}</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-150 text-slate-700 font-medium">
+                                                  {visit.brands.map((b: any, index: number) => {
+                                                    const getQtyForSize = (sizeName: string) => {
+                                                      const found = b.skus.find((s: any) => s.size === sizeName);
+                                                      return found ? found.qty : 0;
+                                                    };
+
+                                                    return (
+                                                      <tr key={index} className="hover:bg-slate-50/30 transition-colors">
+                                                        <td className="py-3 px-4 font-black text-slate-800 text-[11px] uppercase tracking-wide leading-none whitespace-nowrap">
+                                                          <span className="px-2 py-1 bg-red-50 text-red-700 border border-red-100 rounded-md">
+                                                            {b.brandName}
+                                                          </span>
+                                                        </td>
+                                                        {['625ml', '500ml', '330ml', '330ml pts', 'Packs'].map(size => {
+                                                          const qty = getQtyForSize(size);
+                                                          return (
+                                                            <td key={size} className="py-3 px-2 text-center font-mono">
+                                                              {qty > 0 ? (
+                                                                <span className="text-slate-900 font-extrabold bg-sky-50 rounded px-1.5 py-0.5 border border-sky-100">
+                                                                  {qty}
+                                                                </span>
+                                                              ) : (
+                                                                <span className="text-slate-350 font-bold">-</span>
+                                                              )}
+                                                            </td>
+                                                          );
+                                                        })}
+                                                        <td className="py-3 px-4 text-right font-black font-mono text-slate-900 text-xs bg-slate-100/30">
+                                                          {b.totalSkuQty} cs
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </div>
+
+                                          {/* Notes and physical proofs de-duplicated summary */}
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 font-sans">
+                                            {/* Visit field notes / Timestamp */}
+                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2 font-mono">
+                                                {language === 'SI' ? 'ක්‍ෂේත්‍ර නිරීක්ෂණ සටහන්' : 'Visit Field Observations'}
+                                              </span>
+                                              {visit.notes.length > 0 ? (
+                                                <div className="space-y-2">
+                                                  {visit.notes.map((note: string, idx: number) => (
+                                                    <div key={idx} className="bg-amber-50/40 border border-amber-200/55 rounded-lg p-2.5 text-xs font-semibold text-slate-700 leading-normal italic">
+                                                      "{note}"
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="text-slate-400 italic text-[11px] py-2 font-sans">
+                                                  {language === 'SI' ? 'නිරීක්ෂණ සටහන් නොමැත.' : 'No observations annotated for this outlet audit.'}
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Photo Attachments proofs */}
+                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+                                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2 font-mono">
+                                                {language === 'SI' ? 'මුදල් රිසිට්පත් ඡායාරූප' : 'Visit Invoice Attachments'} ({visit.invoicePhotos.length})
+                                              </span>
+                                              {visit.invoicePhotos.length > 0 ? (
+                                                <div className="flex flex-wrap gap-2.5">
+                                                  {visit.invoicePhotos.map((photo: string, idx: number) => (
+                                                    <div key={idx} className="relative group max-w-[110px]">
+                                                      <img 
+                                                        src={photo} 
+                                                        alt={`Audit doc proof ${idx + 1}`} 
+                                                        className="rounded-lg max-h-[80px] w-auto object-contain border border-slate-200"
+                                                        referrerPolicy="no-referrer"
+                                                      />
+                                                      <div className="mt-1 text-[8px] text-slate-400 font-bold font-mono text-center">
+                                                        Proof Image #{idx + 1}
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <div className="text-slate-400 italic text-[11px] py-2 font-sans">
+                                                  {language === 'SI' ? 'ඇමුණුම් ඡායාරූප නොමැත.' : 'No invoice attachments linked. Audited via quantitative stock limits.'}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  );
+                                })}
                               </div>
                             ) : competitorRecords.length > 0 ? (
                               <div className="bg-white border border-slate-200 rounded-xl p-8 py-10 text-center text-slate-400 font-sans">
@@ -3040,7 +3209,7 @@ export default function App() {
                                 </p>
                                 <button
                                   onClick={() => setCompetitorDateFilter('')}
-                                  className="mt-3 px-3.5 py-1.5 text-[10px] font-bold text-sky-650 bg-sky-50 border border-sky-100 hover:bg-sky-100 rounded-lg transition-all shrink-0 cursor-pointer"
+                                  className="mt-3 px-3.5 py-1.5 text-[10px] font-bold text-sky-655 bg-sky-50 border border-sky-100 hover:bg-sky-100 rounded-lg transition-all shrink-0 cursor-pointer"
                                 >
                                   {language === 'SI' ? 'සියල්ල පෙන්වන්න' : 'Show All Records'}
                                 </button>
@@ -3642,27 +3811,6 @@ export default function App() {
                                 </h2>
                               </div>
                             </div>
-
-                            {/* Detailed single-record PDF export */}
-                            <button
-                              onClick={() => handleExportSingleRecordToPDF(selectedCompetitorRecord)}
-                              disabled={isGeneratingPDF}
-                              className={`bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold py-2 px-3 sm:px-4 rounded-xl flex items-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer border-none font-sans shrink-0 ${
-                                isGeneratingPDF ? 'cursor-not-allowed opacity-70' : ''
-                              }`}
-                            >
-                              {isGeneratingPDF ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  <span>{language === 'SI' ? 'සකසමින්...' : 'Generating...'}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <FileText className="w-4 h-4" />
-                                  <span>{language === 'SI' ? 'PDF ගොනුව' : 'Export PDF'}</span>
-                                </>
-                              )}
-                            </button>
                           </div>
 
                           {/* Relational Outlet Information Card */}
